@@ -226,3 +226,4 @@ __marimo__/
 .DS_Store
 dataset_sales_2026.csv
 *Copy.ipynb
+data/
