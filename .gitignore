@@ -226,7 +226,7 @@ __marimo__/
 .DS_Store
 dataset_sales_2026.csv
 *Copy.ipynb
-data/
+/data/
 
 # Churn project: experiment artifacts (regenerable from configs/)
 runs/
