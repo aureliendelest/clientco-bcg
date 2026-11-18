@@ -1,0 +1,5 @@
+# One sweep = one base experiment + a grid of overrides (dot paths).
+base: configs/experiments/hgb.yaml
+grid:
+  model.type: [baseline, logreg, hgb, xgb]
+  label.kind: [class_horizon, relative_horizon]

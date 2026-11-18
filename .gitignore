@@ -227,3 +227,10 @@ __marimo__/
 dataset_sales_2026.csv
 *Copy.ipynb
 data/
+
+# Churn project: experiment artifacts (regenerable from configs/)
+runs/
+results/predictions.parquet
+results/importances.parquet
+data/processed/
+*.pkl

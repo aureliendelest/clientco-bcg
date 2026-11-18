@@ -1,0 +1,12 @@
+# Display texts for the sales reps (French, deliverable). Keys = English feature names.
+# Placeholders in braces are filled from the client's own values.
+recency_days: "Aucun achat depuis {value} jours"
+recency_ratio: "Silence de {value} fois son rythme habituel"
+freq_trend: "Fréquence d'achat en baisse de {value} % sur 90 jours"
+rev_trend: "Chiffre d'affaires en baisse de {value} % sur 90 jours"
+freq_90d: "Seulement {value} jours d'achat sur les 90 derniers jours"
+freq_180d: "{value} jours d'achat sur 180 jours"
+rev_90d: "Chiffre d'affaires de {value} sur 90 jours"
+rev_180d: "Chiffre d'affaires de {value} sur 180 jours"
+gap_median: "Écart habituel entre deux achats : {value} jours"
+gap_p90: "Écart long entre deux achats : {value} jours"

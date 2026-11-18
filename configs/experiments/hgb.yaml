@@ -1,0 +1,4 @@
+extends: configs/base.yaml
+name: hgb
+model:
+  type: hgb
