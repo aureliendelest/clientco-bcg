@@ -7,12 +7,14 @@ B2B retail case study (CentraleSupélec × BCG): customer churn prevention for C
 ```
 configs/         experiment definitions (YAML): base.yaml, experiments/, sweeps/
 src/churn/       the `churn` package (skeleton: bricks are stubs to be filled in)
-  data/          ingestion (CSV -> shifted Parquet) and DuckDB access
-  snapshots/     snapshot tables: features, labels, segments, temporal splits
-  models/        registry (baseline, logreg, HistGradientBoosting, XGBoost), calibration, tuning
-  scoring/       value at risk V, haircut rho, expected value, capacity tiers, reasons, batch list
-  evaluation/    metrics (from saved predictions) and impact simulation
-  pipeline/      run, sweep, collect
+  cli.py         commands: ingest | run | sweep | collect | score
+  config.py      typed configuration, YAML loading, run id, project paths
+  data.py        ingestion (CSV -> shifted Parquet) and DuckDB access
+  snapshots.py   snapshot tables: features, labels, segments, temporal splits
+  models.py      registry (baseline, logreg, HistGradientBoosting, XGBoost), calibration, tuning
+  scoring.py     value at risk V, haircut rho, expected value, capacity tiers, reasons, batch list
+  evaluation.py  metrics (from saved predictions) and impact simulation
+  pipeline.py    run, sweep, collect
 tests/           anti-leakage and unit tests
 notebooks/       exploration notebooks and report.ipynb (reads results/ only)
 docs/            documentation (French); the case brief itself lives in docs/subject/ (not versioned)

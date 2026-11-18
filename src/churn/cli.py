@@ -9,26 +9,26 @@ from collections.abc import Sequence
 
 def _cmd_ingest(args: argparse.Namespace) -> None:
     from churn.config import load_config
-    from churn.data.ingest import ingest
+    from churn.data import ingest
 
     ingest(load_config(args.config), overwrite=args.overwrite)
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
     from churn.config import load_config
-    from churn.pipeline.runner import run
+    from churn.pipeline import run
 
-    run(load_config(args.config))
+    run(load_config(args.config), force=args.force)
 
 
 def _cmd_sweep(args: argparse.Namespace) -> None:
-    from churn.pipeline.sweep import run_sweep
+    from churn.pipeline import run_sweep
 
-    run_sweep(args.sweep)
+    run_sweep(args.sweep, force=args.force)
 
 
 def _cmd_collect(args: argparse.Namespace) -> None:
-    from churn.pipeline.collect import collect
+    from churn.pipeline import collect
 
     collect()
 
@@ -36,7 +36,7 @@ def _cmd_collect(args: argparse.Namespace) -> None:
 def _cmd_score(args: argparse.Namespace) -> None:
     from datetime import date
 
-    from churn.scoring.batch import score_batch
+    from churn.scoring import score_batch
 
     score_batch(args.run_id, date.fromisoformat(args.date))
 
@@ -52,10 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("run", help="Run one experiment from a YAML config.")
     p.add_argument("config", help="Path to an experiment YAML (e.g. configs/experiments/hgb.yaml).")
+    p.add_argument("--force", action="store_true", help="Rerun even if the run folder already exists.")
     p.set_defaults(func=_cmd_run)
 
     p = sub.add_parser("sweep", help="Run a series of experiments from a sweep YAML.")
     p.add_argument("sweep", help="Path to a sweep YAML (e.g. configs/sweeps/models.yaml).")
+    p.add_argument("--force", action="store_true", help="Rerun runs whose folder already exists.")
     p.set_defaults(func=_cmd_sweep)
 
     p = sub.add_parser("collect", help="Merge all runs/ into results/*.parquet.")

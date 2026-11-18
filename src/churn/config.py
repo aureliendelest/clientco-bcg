@@ -1,4 +1,4 @@
-"""Typed experiment configuration.
+"""Typed experiment configuration and project paths.
 
 One YAML file describes one experiment. A file may start from another one with
 `extends: <path>` and only override what changes. Every option that we want to
@@ -20,7 +20,21 @@ from typing import Any, Literal
 
 import yaml
 
-from churn.paths import resolve
+# ------------------------------------------------------------------------------ paths
+
+ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = ROOT / "data" / "processed"  # cached snapshots (git-ignored)
+RUNS_DIR = ROOT / "runs"  # one folder per run (git-ignored)
+RESULTS_DIR = ROOT / "results"  # merged tables read by the report notebook
+
+
+def resolve(path: str | Path) -> Path:
+    """Return an absolute path; relative paths are taken from the repository root."""
+    p = Path(path)
+    return p if p.is_absolute() else ROOT / p
+
+
+# ------------------------------------------------------------------------ dataclasses
 
 
 @dataclass
@@ -38,11 +52,12 @@ class SnapshotsCfg:
     train_end: str = "2025-09-22"
     test_date: str = "2026-03-22"  # never touched during development
     embargo_days: int = 180  # train label windows must end before the test date
+    feature_set: str = "basic"
 
 
 @dataclass
 class LabelCfg:
-    kind: Literal["class_horizon", "relative_horizon", "durable_drop", "survival"] = "class_horizon"
+    kind: Literal["class_horizon", "relative_horizon", "durable_drop"] = "class_horizon"
     # Step 1: horizon per rhythm class, in days (starting values, to calibrate on data)
     class_horizons: dict[str, int] = field(
         default_factory=lambda: {"fast": 30, "medium": 60, "slow": 120, "short_history": 180}
@@ -53,54 +68,20 @@ class LabelCfg:
     h_min: int = 30
     h_max: int = 180
     min_purchases: int = 6  # rhythm features need at least this many purchases
-    # Variant: durable revenue drop
-    drop_threshold: float = 0.5
-
-
-@dataclass
-class FeaturesCfg:
-    feature_set: str = "basic"
-
-
-@dataclass
-class SegmentationCfg:
-    mode: Literal["single", "per_segment"] = "single"
-    by: Literal["frequency", "value"] = "frequency"
+    drop_threshold: float = 0.5  # durable_drop variant
 
 
 @dataclass
 class ModelCfg:
-    type: Literal["baseline", "logreg", "hgb", "xgb", "mlp"] = "hgb"
+    type: Literal["baseline", "logreg", "hgb", "xgb"] = "hgb"
     params: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class CalibrationCfg:
-    method: Literal["isotonic", "platt", "none"] = "isotonic"
-    by_segment: bool = True
-
-
-@dataclass
-class TuningCfg:
-    enabled: bool = False
-    n_trials: int = 50
+    calibration: Literal["isotonic", "none"] = "isotonic"
+    calibration_by_segment: bool = True
+    segmentation: Literal["single", "per_segment"] = "single"
+    segment_by: Literal["frequency", "value"] = "frequency"
+    tuning: bool = False  # Optuna, once the best model family is chosen
+    tuning_trials: int = 50
     cv_folds: int = 5  # grouped by client (an internal embargo is impossible on 6 months)
-    group_by: str = "client_id"
-
-
-@dataclass
-class ValueCfg:
-    # V = revenue the client would generate if he stayed (NOT a forecast of realized revenue)
-    definition: Literal["ca_180d_annualized", "ca_12m", "conditional_forecast"] = "ca_180d_annualized"
-
-
-@dataclass
-class RhoCfg:
-    # Haircut on V: a saved at-risk client buys less than before
-    method: Literal["rebound_calibrated", "fixed"] = "rebound_calibrated"
-    fixed_value: float = 1.0
-    by_segment: bool = True
-    drop_threshold: float = 0.5  # clients that dropped by more than this without leaving
 
 
 @dataclass
@@ -112,7 +93,14 @@ class TierCfg:
 
 
 @dataclass
-class CapacityCfg:
+class ScoringCfg:
+    # V = revenue the client would generate if he stayed (NOT a forecast of realized revenue)
+    value_definition: Literal["ca_180d_annualized", "ca_12m"] = "ca_180d_annualized"
+    # Haircut on V: a saved at-risk client buys less than before
+    rho_method: Literal["rebound_calibrated", "fixed"] = "rebound_calibrated"
+    rho_fixed_value: float = 1.0
+    rho_drop_threshold: float = 0.5  # clients that dropped by more than this without leaving
+    min_proba: float = 0.0  # minimal calibrated probability to be listed
     n_reps: int = 200
     # Team hypothesis, to confirm at tutoring: a share of reps is dedicated to churn
     tiers: list[TierCfg] = field(
@@ -125,30 +113,12 @@ class CapacityCfg:
 
 
 @dataclass
-class ScoringCfg:
-    value: ValueCfg = field(default_factory=ValueCfg)
-    rho: RhoCfg = field(default_factory=RhoCfg)
-    min_proba: float = 0.0  # minimal calibrated probability to be listed
-    key_accounts: Literal["none", "separate_list", "top_deciles_model"] = "separate_list"
-    capacity: CapacityCfg = field(default_factory=CapacityCfg)
-
-
-@dataclass
 class EvaluationCfg:
     k_values: list[int] = field(default_factory=lambda: [2000, 5000, 10000])
     metrics: list[str] = field(
-        default_factory=lambda: [
-            "capture_at_k",
-            "precision",
-            "recall",
-            "f1",
-            "pr_auc",
-            "roc_auc",
-            "brier",
-        ]
+        default_factory=lambda: ["capture_at_k", "precision", "recall", "f1", "pr_auc", "roc_auc", "brier"]
     )
-    bootstrap_n: int = 200
-    bootstrap_group_by: str = "client_id"
+    bootstrap_n: int = 200  # clients are resampled, not rows
 
 
 @dataclass
@@ -166,11 +136,7 @@ class Config:
     dataset: DatasetCfg = field(default_factory=DatasetCfg)
     snapshots: SnapshotsCfg = field(default_factory=SnapshotsCfg)
     label: LabelCfg = field(default_factory=LabelCfg)
-    features: FeaturesCfg = field(default_factory=FeaturesCfg)
-    segmentation: SegmentationCfg = field(default_factory=SegmentationCfg)
     model: ModelCfg = field(default_factory=ModelCfg)
-    calibration: CalibrationCfg = field(default_factory=CalibrationCfg)
-    tuning: TuningCfg = field(default_factory=TuningCfg)
     scoring: ScoringCfg = field(default_factory=ScoringCfg)
     evaluation: EvaluationCfg = field(default_factory=EvaluationCfg)
     impact: ImpactCfg = field(default_factory=ImpactCfg)
@@ -226,7 +192,7 @@ def load_config(path: str | Path) -> Config:
 
 
 def config_to_dict(cfg: Config) -> dict[str, Any]:
-    """Plain-dict view of a configuration (used for hashing and `runs/<id>/config.yaml`)."""
+    """Plain-dict view of a configuration (hashing and `runs/<id>/config.yaml`)."""
     return dataclasses.asdict(cfg)
 
 
@@ -236,7 +202,8 @@ def config_hash(cfg: Config) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def run_id(cfg: Config, git_sha: str, data_fingerprint: str) -> str:
-    """Run identity = hash(config, git commit, data fingerprint); an identical run is not rerun."""
-    payload = f"{config_hash(cfg)}|{git_sha}|{data_fingerprint}"
-    return f"{cfg.name}-{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:10]}"
+def run_id(cfg: Config) -> str:
+    """Run identity = name + short hash of the configuration. The git commit and the data
+    fingerprint are recorded in `meta.json`, not in the id. A run whose folder already exists
+    is skipped unless forced."""
+    return f"{cfg.name}-{config_hash(cfg)[:10]}"

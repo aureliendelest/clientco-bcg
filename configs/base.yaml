@@ -15,9 +15,10 @@ snapshots:
   train_end: "2025-09-22"
   test_date: "2026-03-22"   # never touched during development
   embargo_days: 180         # train label windows must end before the test date
+  feature_set: basic
 
 label:
-  kind: class_horizon       # class_horizon | relative_horizon | durable_drop | survival
+  kind: class_horizon       # class_horizon | relative_horizon | durable_drop
   class_horizons: {fast: 30, medium: 60, slow: 120, short_history: 180}   # starting values, to calibrate
   rhythm_bounds_days: {fast_max: 7, medium_max: 30}
   k: 2.0                    # relative_horizon: H_i = clip(k * p90_gap_i, h_min, h_max); try 1.5, 2, 3
@@ -26,49 +27,33 @@ label:
   min_purchases: 6          # rhythm features need at least this many purchases
   drop_threshold: 0.5       # durable_drop variant
 
-features:
-  feature_set: basic
-
-segmentation:
-  mode: single              # single | per_segment
-  by: frequency             # frequency | value
-
 model:
-  type: hgb                 # baseline | logreg | hgb | xgb | mlp
+  type: hgb                 # baseline | logreg | hgb | xgb
   params: {}
-
-calibration:
-  method: isotonic          # isotonic | platt | none
-  by_segment: true
-
-tuning:
-  enabled: false
-  n_trials: 50
+  calibration: isotonic     # isotonic | none
+  calibration_by_segment: true
+  segmentation: single      # single | per_segment (key accounts: per_segment by value)
+  segment_by: frequency     # frequency | value
+  tuning: false             # Optuna, once the best model family is chosen
+  tuning_trials: 50
   cv_folds: 5               # grouped by client
-  group_by: client_id
 
 scoring:
-  value:
-    definition: ca_180d_annualized   # ca_180d_annualized | ca_12m | conditional_forecast
-  rho:
-    method: rebound_calibrated       # rebound_calibrated | fixed
-    fixed_value: 1.0
-    by_segment: true
-    drop_threshold: 0.5
-  min_proba: 0.0                     # minimal calibrated probability to be listed
-  key_accounts: separate_list        # none | separate_list | top_deciles_model
-  capacity:
-    n_reps: 200
-    tiers:                           # team hypothesis, to confirm at tutoring
-      - {name: dedicated, share_of_reps: 0.2, actions_per_week: 10, channel: visit_or_call}
-      - {name: general, share_of_reps: 0.8, actions_per_week: 5, channel: call}
-    opportunity_cost_per_action: null
+  value_definition: ca_180d_annualized   # ca_180d_annualized | ca_12m
+  rho_method: rebound_calibrated         # rebound_calibrated | fixed
+  rho_fixed_value: 1.0
+  rho_drop_threshold: 0.5
+  min_proba: 0.0                         # minimal calibrated probability to be listed
+  n_reps: 200
+  tiers:                                 # team hypothesis, to confirm at tutoring
+    - {name: dedicated, share_of_reps: 0.2, actions_per_week: 10, channel: visit_or_call}
+    - {name: general, share_of_reps: 0.8, actions_per_week: 5, channel: call}
+  opportunity_cost_per_action: null
 
 evaluation:
   k_values: [2000, 5000, 10000]
   metrics: [capture_at_k, precision, recall, f1, pr_auc, roc_auc, brier]
   bootstrap_n: 200
-  bootstrap_group_by: client_id
 
 impact:
   retention_scenarios: [0.1, 0.2, 0.3]   # team hypothesis, measured by the pilot

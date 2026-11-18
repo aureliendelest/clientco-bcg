@@ -30,7 +30,7 @@ churn = "churn.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-churn = ["scoring/reasons_fr.yaml"]
+churn = ["reasons_fr.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
