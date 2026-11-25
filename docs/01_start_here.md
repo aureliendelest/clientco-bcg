@@ -10,7 +10,7 @@
 - **Notre mission.** Lister 8–10 use cases data, en prioriser 5 dans une feuille de route 2027, **traiter le n°1 en profondeur (avec un modèle)**, définir les besoins en données d'un 2ᵉ use case, et demander un budget.
 - **Ce qu'on a choisi.** Le n°1 est la **prévention du churn** : prédire quels clients vont arrêter d'acheter, pour que les commerciaux les appellent en priorité.
 - **L'idée qui structure tout.** Le but n'est pas de prédire qui part, mais de **déclencher une action commerciale qui change le résultat, et de le prouver**. Prédire n'est pas prévenir. On classe donc les clients par **euros espérés protégés**, pas par probabilité seule.
-- **Où on en est.** Cadrage, exploration des données et décisions de méthode : faits. Le **code est un squelette** (la plupart des fonctions sont des stubs) : c'est là que vous intervenez.
+- **Où on en est.** Cadrage, exploration des données et décisions de méthode : faits. Le **code est en cours** (`data.py` et `snapshots.py` faits ; modèles, pipeline, évaluation et scoring encore à écrire) : c'est là que vous intervenez.
 - **Échéances.** 26/11 à 12h : code. 26/11 à 17h : slides. 27/11 : présentation au CEO.
 
 ## 2. Le cas : mission, livrables, règles du jeu
@@ -128,8 +128,9 @@ Backtest des modèles, simulation d'impact avec scénarios, explicabilité, puis
 | Exploration, périmètre et labels (notebooks `01` à `08`) | Fait |
 | Documentation restructurée (9 documents numérotés et un glossaire dans `docs/`) | Fait |
 | Squelette du code (9 modules, 7 fichiers de configuration, 3 fichiers de tests) | Fait |
-| **Implémentation des briques** | **À faire** : tous les corps de fonctions de `data.py`, `snapshots.py`, `models.py`, `pipeline.py`, `evaluation.py`, `scoring.py` lèvent `NotImplementedError` |
-| Configuration et CLI | Implémentées (`config.py`, `cli.py`) ; la suite de tests passe : 9 tests OK, **12 skippés** (ce sont les tests des briques à écrire) |
+| Implémentation : `data.py` et `snapshots.py` | Fait (25/11) : ingestion, tables client × jour, variables, labels A, B et partiel, segments, découpage, cache ; photo du 22/03/2024 identique à celle du notebook `08` |
+| **Implémentation : `models.py`, `pipeline.py`, `evaluation.py`, `scoring.py`** | **À faire** : leurs fonctions lèvent encore `NotImplementedError` (sauf `scoring.compute_value`) |
+| Configuration et CLI | Implémentées (`config.py`, `cli.py`) ; la suite de tests passe : 30 tests OK, **5 skippés** (les tests des briques à écrire) |
 | Notebook de rapport (`experiment_report.ipynb`) | Structure posée, ne lit que `results/` |
 | Maquette de tableau de bord (Streamlit) | Optionnelle, go ou no-go le 24/11 |
 

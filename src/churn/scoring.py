@@ -20,9 +20,19 @@ from churn.config import Config
 # ----------------------------------------------------------------------------- value
 
 
+ANNUALIZATION_FACTOR = 2  # 180 days of revenue -> one year (the team rounds 365 / 180 to 2)
+
+
 def compute_value(df: pd.DataFrame, cfg: Config) -> pd.Series:
-    """V per client according to `ScoringCfg.value_definition` (default: last 180 days, annualized)."""
-    raise NotImplementedError("scoring.compute_value")
+    """V per client according to `ScoringCfg.value_definition` (default: last 180 days, annualized).
+    Reads `rev_180d`, the revenue of the 180 days before the snapshot."""
+    definition = cfg.scoring.value_definition
+    if definition == "ca_180d_annualized":
+        return (df["rev_180d"] * ANNUALIZATION_FACTOR).rename("V")
+    if definition == "ca_12m":
+        # Needs 365 days of history: the first snapshots (6 months of data) do not have it.
+        raise NotImplementedError("scoring.compute_value: ca_12m")
+    raise ValueError(f"Unknown value_definition {definition!r}")
 
 
 # -------------------------------------------------------------------- expected value

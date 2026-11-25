@@ -26,7 +26,7 @@ label:
   truth_days: 180           # evaluation truth, whatever the training label
   min_purchases: 6          # perimeter: regular clients (>= 6 purchase days over 180 days, median gap <= 30 days)
   max_median_gap_days: 30
-  rhythm_bounds_days: {fast_max: 7, medium_max: 30}
+  rhythm_bounds_days: {fast_max: 7}
 
 model:
   type: hgb                 # baseline | logreg | hgb | xgb
@@ -50,7 +50,7 @@ scoring:
 
 evaluation:
   k_values: [700, 2000, 4000]            # monthly list, previous tables, six cumulated lists
-  metrics: [capture_at_k, precision, recall, f1, pr_auc, roc_auc, brier]
+  metrics: [capture_at_k, size_only_capture, oracle_capture, pr_auc, brier_raw, brier_cal]   # see evaluation.py
   bootstrap_n: 200
 
 impact:

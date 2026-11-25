@@ -49,7 +49,7 @@ source .venv/bin/activate
 pip install -r requirements.txt     # versions exactes, testées
 pip install -e ".[dev]"             # le paquet churn (ou : make setup)
 python -m ipykernel install --user --name clientco-bcg
-make test                           # doit afficher : 9 passed, 12 skipped
+make test                           # doit afficher : 38 passed, 4 skipped
 ```
 
 **Les données ne sont pas dans Git** (~4 Go) : demandez le CSV à Aurélien ou récupérez-le via le dossier du cas, et placez-le dans `data/dataset_sales_2026.csv`. Le notebook `01_data_quality_and_activity_overview` le convertit en `data/sales.parquet` au premier lancement (~1 min).
@@ -70,7 +70,7 @@ src/churn/
   evaluation.py métriques (depuis les prédictions) et simulation d'impact
   pipeline.py   run, sweep, collect
   reasons_fr.yaml  phrases affichées aux commerciaux
-tests/          anti-fuite et tests unitaires (squelettes, skippés pour l'instant)
+tests/          anti-fuite et tests unitaires (data et snapshots actifs ; les autres briques : squelettes skippés)
 notebooks/      01 à 08 : exploration, périmètre, labels (preuves) ; experiment_report.ipynb (lit results/ seulement)
 docs/           documentation en français ; docs/subject/ = brief du cas (non versionné)
 ```
@@ -92,6 +92,7 @@ Tant qu'une brique est un stub, la commande répond `not implemented yet` (code 
 
 - **Table de photo** (`snapshots.py`) : `client_id, snapshot_date, <variables>, label, horizon_days, V, segment`. Variables « basic » : `recency_days, freq_180d, freq_90d, freq_prev_90d, rev_180d, rev_90d, rev_prev_90d, gap_median, gap_p90, recency_ratio, freq_trend, rev_trend`.
 - **Table de prédictions** (`evaluation.py`) : `run_id, client_id, snapshot_date, split, p_raw, p_cal, V, ev, label, gone, horizon_days, segment`.
+- **Table de métriques** (`evaluation.evaluate_predictions`, une par run, fusionnée dans `results/metrics.parquet`) : `run_id, split, segment, metric, k, value, ci_low, ci_high`. Segment `all` : `capture_at_k`, `size_only_capture`, `oracle_capture` (une ligne par K de `evaluation.k_values`), `pr_auc`, `brier_raw`, `brier_cal` (`k` vide) ; un segment par valeur de `segment` : probabilités seulement. Définitions et choix dans `02_modeling_decisions.md` § 8 ; la liste des métriques demandées est `evaluation.metrics` (une métrique inconnue ou non implémentée est refusée).
 - **Liste d'action** (`scoring.py`) : `rank, client_id, p_cal, V, ev, segment, score_kind, suggested_channel, reason_1, reason_2, reason_3`.
 
 Les docstrings de chaque fonction décrivent le comportement attendu. Le code de référence pour construire les tables client × jour est dans les notebooks `01` et `04`.

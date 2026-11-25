@@ -6,7 +6,7 @@ B2B retail case study (CentraleSupélec × BCG): customer churn prevention for C
 
 ```
 configs/         experiment definitions (YAML): base.yaml, experiments/, sweeps/
-src/churn/       the `churn` package (skeleton: bricks are stubs to be filled in)
+src/churn/       the `churn` package (data and snapshots implemented; models, pipeline, evaluation and scoring are still stubs)
   cli.py         commands: ingest | run | sweep | collect | score
   config.py      typed configuration, YAML loading, run id, project paths
   data.py        ingestion (CSV -> shifted Parquet) and DuckDB access
@@ -68,7 +68,7 @@ python -m churn score <run_id> --date 2026-03-22         # weekly action list (C
 make test                                                # anti-leakage and unit tests
 ```
 
-The commands are in place but most bricks are still stubs: they exit with `not implemented yet` until filled in.
+`ingest` works; `run`, `sweep`, `collect` and `score` still exit with `not implemented yet` until their bricks are filled in.
 
 ## Documentation
 

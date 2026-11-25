@@ -15,7 +15,7 @@
 | Élément | Décision |
 |---|---|
 | Population | Clients réguliers : ≥ 6 jours d'achat sur les 180 jours avant la photo, écart médian ≤ 30 jours (rapides ≤ 7 j, moyens 8 à 30 j). 51 % des clients, 95 % du CA, 52 % du CA du churn total |
-| Hors modèle | Lents (≈ 0,1 % du CA) ; historique court (< 6 achats) en baseline seule |
+| Hors modèle | Lents (≈ 0,1 % du CA) ; historique court (< 6 achats) : hors modèle (pas d'écart p90 fiable), une règle simple pourra les couvrir plus tard |
 | Jour d'achat | CA net des retours du jour > 0,01 € |
 | Valeur `V` | CA des 180 jours précédents × 2 |
 | Données | +2 ans appliqués une fois (`sales_shifted.parquet`), CSV brut jamais modifié |
@@ -75,8 +75,11 @@ Total, partiel et interruption s'excluent ; le durable est un sous-ensemble du p
 
 ## 8. Évaluation et marge
 
-- **Mesure principale** : CA des vrais partants capté dans les K premiers, divisé par le CA de tous les vrais partants (au sens de la vérité à 180 jours), toujours comparée au repère « taille seule ».
-- **Métriques sur les probabilités** (précision, rappel, F1, PR-AUC, ROC-AUC, Brier) : pour régler et comparer les modèles, jamais pour décider ; seuils choisis sur la validation, **jamais sur le test** ; par segment, avec IC par bootstrap sur les clients.
+- **Mesure principale** : **CA capté @K** = CA (V) des vrais partants dans les K premiers clients classés par valeur espérée, divisé par le CA de tous les vrais partants, au sens de la vérité à 180 jours (`gone`), quel que soit le label d'entraînement. K de tête : **700** ; 2 000 et 4 000 en robustesse (2 000 équivaut à 2,5 à 3 fois la capacité supposée).
+- **Deux repères calculés avec chaque run**, au même K : **taille seule** (les K plus gros clients, sans modèle) et **oracle** (les vrais partants classés par V : le maximum atteignable avec K appels). On lit le modèle par son surplus sur la taille seule et par la part de l'oracle qu'il atteint ; le CA capté brut seul se défend mal, car la taille explique l'essentiel (lemme 4 de `03_evidence.md`, § 5).
+- **Métriques sur les probabilités** : **PR-AUC** de `p_raw` contre `gone` (qualité du classement, comparable entre labels) et **Brier** de `p_raw` et de `p_cal` contre `label`, l'événement que le modèle prédit. Les Brier des labels A et B ne sont pas comparables entre eux (horizons différents) : les labels se comparent sur le CA capté. Elles servent à régler et comparer, jamais à décider ; par segment, ce sont les seules métriques calculées (un top K à l'intérieur d'un segment n'est pas la liste remise aux commerciaux).
+- **Intervalles de confiance** : bootstrap sur les clients (200 tirages, les mêmes tirages pour toutes les métriques), 95 %. Un client tiré deux fois prend deux places dans le top K.
+- **Hors du noyau, pour plus tard** : précision, rappel, F1 (au seuil choisi sur la validation, jamais sur le test), ROC-AUC, Brier skill score, ECE, precision@K et lift@K ; bootstrap **apparié** de la différence entre deux runs ; moyenne sur plusieurs photos de validation. La table de métriques est « longue » : une métrique de plus est une ligne de plus, sans rien casser.
 - **Tests anti-fuite automatiques** avant chaque série d'expériences (`tests/test_no_leakage.py`).
 - **Repères** : liste des K plus gros clients (sans modèle) et baseline récence ÷ p90 × V.
 - **Bootstrap** sur les clients (200 tirages), moyenne de plusieurs graines pour comparer des règles.

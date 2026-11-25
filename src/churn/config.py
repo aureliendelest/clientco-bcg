@@ -72,7 +72,7 @@ class LabelCfg:
     # Perimeter: regular clients (>= min_purchases purchase days over lookback_days, median gap <= max_median_gap_days)
     min_purchases: int = 6
     max_median_gap_days: int = 30
-    rhythm_bounds_days: dict[str, int] = field(default_factory=lambda: {"fast_max": 7, "medium_max": 30})
+    rhythm_bounds_days: dict[str, int] = field(default_factory=lambda: {"fast_max": 7})
 
 
 @dataclass
@@ -105,7 +105,7 @@ class ScoringCfg:
 class EvaluationCfg:
     k_values: list[int] = field(default_factory=lambda: [700, 2000, 4000])  # monthly list, previous tables, six lists
     metrics: list[str] = field(
-        default_factory=lambda: ["capture_at_k", "precision", "recall", "f1", "pr_auc", "roc_auc", "brier"]
+        default_factory=lambda: ["capture_at_k", "size_only_capture", "oracle_capture", "pr_auc", "brier_raw", "brier_cal"]
     )
     bootstrap_n: int = 200  # clients are resampled, not rows
 
