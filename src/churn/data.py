@@ -36,9 +36,11 @@ def connect(parquet: str | Path | None = None) -> duckdb.DuckDBPyConnection:
 
 
 def build_client_day_table(con: duckdb.DuckDBPyConnection) -> None:
-    """Create the tables `cd` (one row per client and order date) and `bd` (purchase days only,
-    i.e. positive sales). A purchase day is a (client_id, date_order) with sales_net > 0.
+    """Create the tables `cd` (one row per client and order date, with the net revenue of the day) and `bn`
+    (purchase days only). A purchase day is a (client_id, date_order) whose net revenue (sales minus the
+    returns of the day) is > 0.01 EUR: a purchase returned the same day is not a purchase.
 
-    Reference implementation: cell 16 of notebooks/churn_exploration_viz.ipynb.
+    Reference implementation: the "Table (client, jour d'achat)" cells of
+    notebooks/01_data_quality_and_activity_overview.ipynb and notebooks/04_churn_scope_total_vs_partial.ipynb.
     """
     raise NotImplementedError("data.build_client_day_table")

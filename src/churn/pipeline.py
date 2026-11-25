@@ -1,7 +1,7 @@
 """Run orchestration: one run, a series of runs, and the merge of all runs into results/.
 
-A run executes: load snapshots (cached in data/processed/) -> split (embargo) -> [tune] -> train ->
-calibrate -> value, rho, EV -> predictions. It writes `runs/<run_id>/`:
+A run executes: load snapshots (cached in data/processed/) -> split (training labels known before the test) -> [tune] -> train ->
+calibrate -> value, EV -> predictions. It writes `runs/<run_id>/`:
     config.yaml, meta.json (git sha, data fingerprint, seed, timings), predictions.parquet,
     importances.parquet, model.pkl (kept local, never committed).
 Metrics are NOT computed in a run: `collect` computes them from predictions with one module.
@@ -29,7 +29,7 @@ def run(cfg: Config, *, force: bool = False) -> Path:
 #     base: configs/experiments/hgb.yaml
 #     grid:
 #       model.type: [logreg, hgb, xgb]
-#       label.kind: [class_horizon, relative_horizon]
+#       label.kind: [fixed_horizon, relative_horizon]
 
 
 def expand_sweep(sweep_path: str | Path) -> list[Config]:

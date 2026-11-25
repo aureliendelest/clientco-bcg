@@ -1,0 +1,8 @@
+# Label B: lost = no purchase within clip(3 x p90 gap, 45, 90) days. Same model as hgb.yaml (label A),
+# still evaluated against the 180-day truth. The last training snapshot is derived from the label (22/12/2025).
+extends: configs/base.yaml
+name: hgb_label_b
+model:
+  type: hgb
+label:
+  kind: relative_horizon

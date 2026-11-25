@@ -5,15 +5,15 @@ import pytest
 # ---- snapshots: labels
 
 
-@pytest.mark.skip(reason="stub: snapshots.label_class_horizon not implemented")
-def test_class_horizon_uses_rhythm_class_horizon():
-    # A 'fast' client is lost after label.class_horizons['fast'] days without purchase, not 180.
+@pytest.mark.skip(reason="stub: snapshots.label_fixed_horizon not implemented")
+def test_fixed_horizon_is_the_same_for_every_client():
+    # Label A: lost = no purchase day within label.horizon_days (180) after T, whatever the rhythm.
     ...
 
 
 @pytest.mark.skip(reason="stub: snapshots.label_relative_horizon not implemented")
 def test_relative_horizon_is_clipped_between_h_min_and_h_max():
-    # H_i = clip(k * p90_gap_i, h_min, h_max)
+    # Label B: H_i = clip(k * p90_gap_i, h_min, h_max) = clip(3 * p90, 45, 90) by default
     ...
 
 

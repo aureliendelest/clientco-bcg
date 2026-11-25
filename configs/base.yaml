@@ -11,21 +11,22 @@ dataset:
 snapshots:
   lookback_days: 180        # features use history strictly before the snapshot date
   step: monthly             # monthly | weekly (weekly gave the same quality at ~4x the rows)
-  train_start: "2025-03-22" # shifted dates
-  train_end: "2025-09-22"
+  train_start: "2025-03-22" # shifted dates (the first 6 months of data only feed the features)
+  train_end: null           # derived: last monthly date whose label is known before the test (22/09/2025 for A, 22/12/2025 for B)
   test_date: "2026-03-22"   # never touched during development
-  embargo_days: 180         # train label windows must end before the test date
   feature_set: basic
 
 label:
-  kind: class_horizon       # class_horizon | relative_horizon | durable_drop
-  class_horizons: {fast: 30, medium: 60, slow: 120, short_history: 180}   # starting values, to calibrate
+  kind: fixed_horizon       # fixed_horizon (label A) | relative_horizon (label B) | partial_drop (second score)
+  horizon_days: 180         # label A: lost = no purchase in the next 180 days (also the evaluation truth)
+  k: 3.0                    # label B: H_i = clip(k * p90_gap_i, h_min, h_max)
+  h_min: 45
+  h_max: 90
+  drop_threshold: 0.5       # partial_drop: revenue after T < 50 % of revenue before T
+  truth_days: 180           # evaluation truth, whatever the training label
+  min_purchases: 6          # perimeter: regular clients (>= 6 purchase days over 180 days, median gap <= 30 days)
+  max_median_gap_days: 30
   rhythm_bounds_days: {fast_max: 7, medium_max: 30}
-  k: 2.0                    # relative_horizon: H_i = clip(k * p90_gap_i, h_min, h_max); try 1.5, 2, 3
-  h_min: 30
-  h_max: 180
-  min_purchases: 6          # rhythm features need at least this many purchases
-  drop_threshold: 0.5       # durable_drop variant
 
 model:
   type: hgb                 # baseline | logreg | hgb | xgb
@@ -40,18 +41,15 @@ model:
 
 scoring:
   value_definition: ca_180d_annualized   # ca_180d_annualized | ca_12m
-  rho_method: rebound_calibrated         # rebound_calibrated | fixed
-  rho_fixed_value: 1.0
-  rho_drop_threshold: 0.5
   min_proba: 0.0                         # minimal calibrated probability to be listed
-  n_reps: 200
-  tiers:                                 # team hypothesis, to confirm at tutoring
-    - {name: dedicated, share_of_reps: 0.2, actions_per_week: 10, channel: visit_or_call}
-    - {name: general, share_of_reps: 0.8, actions_per_week: 5, channel: call}
+  calls_per_week: 500                    # team hypothesis (100 reps x 5 calls), company-wide
+  dataset_share: 0.30                    # the dataset is ~30 % of revenue
+  list_size_k: 700                       # monthly list at dataset scale (600 to 760 calls a month)
+  total_share_of_list: 0.25              # places reserved to the total-churn score; the rest goes to the partial score
   opportunity_cost_per_action: null
 
 evaluation:
-  k_values: [2000, 5000, 10000]
+  k_values: [700, 2000, 4000]            # monthly list, previous tables, six cumulated lists
   metrics: [capture_at_k, precision, recall, f1, pr_auc, roc_auc, brier]
   bootstrap_n: 200
 

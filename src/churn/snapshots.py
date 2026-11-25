@@ -71,38 +71,41 @@ def compute_features(con: duckdb.DuckDBPyConnection, snapshot_date: date, featur
 
 
 # -------------------------------------------------------------------------------- labels
-# `LabelCfg.kind`: class_horizon (step 1) | relative_horizon (step 2) | durable_drop (variant).
-# Each function adds `label` (1 = lost) and `horizon_days` to a snapshot.
+# `LabelCfg.kind`: fixed_horizon (label A) | relative_horizon (label B) | partial_drop (second score).
+# Each function adds `label` (1 = lost) and `horizon_days` to a snapshot. Whatever the kind, the snapshot also
+# carries `gone` (no purchase within `truth_days`): the evaluation truth.
 
 LabelFn = Callable[[pd.DataFrame, duckdb.DuckDBPyConnection, date, LabelCfg], pd.DataFrame]
 
 
-def label_class_horizon(df: pd.DataFrame, con: duckdb.DuckDBPyConnection, snapshot_date: date, cfg: LabelCfg) -> pd.DataFrame:
-    """Lost = no purchase within the horizon of the client's rhythm class."""
-    raise NotImplementedError("snapshots.label_class_horizon")
+def label_fixed_horizon(df: pd.DataFrame, con: duckdb.DuckDBPyConnection, snapshot_date: date, cfg: LabelCfg) -> pd.DataFrame:
+    """Label A. Lost = no purchase day within `horizon_days` (180) after the snapshot."""
+    raise NotImplementedError("snapshots.label_fixed_horizon")
 
 
 def label_relative_horizon(df: pd.DataFrame, con: duckdb.DuckDBPyConnection, snapshot_date: date, cfg: LabelCfg) -> pd.DataFrame:
-    """Lost = no purchase within H_i = clip(k * p90_gap_i, h_min, h_max)."""
+    """Label B. Lost = no purchase within H_i = clip(k * p90_gap_i, h_min, h_max) (3, 45, 90 by default)."""
     raise NotImplementedError("snapshots.label_relative_horizon")
 
 
-def label_durable_drop(df: pd.DataFrame, con: duckdb.DuckDBPyConnection, snapshot_date: date, cfg: LabelCfg) -> pd.DataFrame:
-    """Lost = revenue after T stays more than `drop_threshold` below the revenue before T."""
-    raise NotImplementedError("snapshots.label_durable_drop")
+def label_partial_drop(df: pd.DataFrame, con: duckdb.DuckDBPyConnection, snapshot_date: date, cfg: LabelCfg) -> pd.DataFrame:
+    """Second score. Lost = at least one purchase after T, but revenue over the next 180 days below
+    `drop_threshold` x the revenue of the 180 days before T."""
+    raise NotImplementedError("snapshots.label_partial_drop")
 
 
 LABELS: dict[str, LabelFn] = {
-    "class_horizon": label_class_horizon,
+    "fixed_horizon": label_fixed_horizon,
     "relative_horizon": label_relative_horizon,
-    "durable_drop": label_durable_drop,
+    "partial_drop": label_partial_drop,
 }
 
 # ------------------------------------------------------------------------------ segments
 
 
 def rhythm_class(df: pd.DataFrame, cfg: Config) -> pd.Series:
-    """`fast` / `medium` / `slow` from the client's median gap, `short_history` below `min_purchases`."""
+    """`fast` / `medium` / `slow` from the client's median gap, `short_history` below `min_purchases`.
+    The model perimeter keeps `fast` and `medium` (regular clients)."""
     raise NotImplementedError("snapshots.rhythm_class")
 
 
@@ -126,14 +129,15 @@ def assign_segments(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 
 def temporal_split(snapshots: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(train, test): train = snapshots from `train_start` to `train_end`, test = the `test_date`
-    snapshot. Calls `assert_embargo` before returning."""
+    snapshot. The last training date is `Config.last_train_date()`. Calls `assert_labels_known_before_test`
+    before returning."""
     raise NotImplementedError("snapshots.temporal_split")
 
 
-def assert_embargo(train_dates: list[date], test_date: date, embargo_days: int) -> None:
+def assert_labels_known_before_test(train_dates: list[date], test_date: date, wait_days: int) -> None:
     """Raise if the label window of any training snapshot ends after `test_date`
-    (that would let the model see the future)."""
-    raise NotImplementedError("snapshots.assert_embargo")
+    (that would let the model see the future). `wait_days` = `Config.label_wait_days()`."""
+    raise NotImplementedError("snapshots.assert_labels_known_before_test")
 
 
 def client_group_folds(df: pd.DataFrame, n_splits: int, group_by: str = "client_id") -> Iterator[tuple[np.ndarray, np.ndarray]]:

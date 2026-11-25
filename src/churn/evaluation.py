@@ -1,10 +1,11 @@
 """Evaluation, always computed from saved predictions (never at training time).
 
 Prediction schema:
-    run_id, client_id, snapshot_date, split, p_raw, p_cal, V, rho, ev, label, horizon_days, segment
+    run_id, client_id, snapshot_date, split, p_raw, p_cal, V, ev, label, gone, horizon_days, segment
 
 Main metric (comparable when H varies by client): revenue captured among the top K =
-sum(V of true churners in the top K) / sum(V of all true churners), by capacity tier.
+sum(V of true churners in the top K) / sum(V of all true churners), where "true churner" means `gone`
+(no purchase within 180 days) whatever the training label: labels A and B are compared on the same truth.
 Probability metrics (precision, recall, F1, PR-AUC, ROC-AUC, Brier) are for tuning and comparison;
 thresholds are chosen on validation, never on the test snapshot.
 """
@@ -52,7 +53,7 @@ def evaluate_predictions(pred: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 
 
 # -------------------------------------------------------------------------------- impact
-# revenue x lost share x detection x retention x rho x margin. Detection comes from the backtest,
+# revenue x lost share x detection x retention x margin. Detection comes from the backtest,
 # the lost share is measured on the dataset, retention is a team hypothesis (scenarios) until the
 # pilot measures it. The net impact subtracts the opportunity cost of dedicated reps.
 
@@ -63,6 +64,6 @@ def impact_scenarios(metrics: pd.DataFrame, cfg: Config) -> pd.DataFrame:
 
 
 def tornado_table(cfg: Config, ranges: dict[str, tuple[float, float]]) -> pd.DataFrame:
-    """One row per parameter (lost share, detection, retention, rho): impact at its low and high
+    """One row per parameter (lost share, detection, retention): impact at its low and high
     value, others at the central case, sorted by amplitude."""
     raise NotImplementedError("evaluation.tornado_table")

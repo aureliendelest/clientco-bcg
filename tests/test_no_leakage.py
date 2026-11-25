@@ -1,6 +1,6 @@
 """Anti-leakage suite, to run before every sweep (`make test`).
 
-These are the five rules from docs/churn_enjeux_decisions_vigilances.md. They are skipped until
+These are the five rules from docs/06_engineering.md (section 5). They are skipped until
 the corresponding bricks are implemented.
 """
 
@@ -16,7 +16,7 @@ def test_features_on_truncated_data_are_identical():
 
 @pytest.mark.skip(reason="stub: snapshots.temporal_split not implemented")
 def test_train_label_windows_end_before_test_date():
-    # Rule 2: for every training snapshot, snapshot_date + embargo_days <= test_date.
+    # Rule 2: for every training snapshot, snapshot_date + Config.label_wait_days() <= test_date (180 for label A, h_max for label B).
     ...
 
 
@@ -33,7 +33,7 @@ def test_rhythm_features_use_only_prior_purchases_and_need_min_purchases():
     ...
 
 
-@pytest.mark.skip(reason="stub: calibration and rho not implemented")
-def test_rho_and_calibration_are_fitted_without_test_data():
-    # Rule 5: fit_calibrator and fit_rho never see the test snapshot.
+@pytest.mark.skip(reason="stub: calibration not implemented")
+def test_calibration_is_fitted_without_test_data():
+    # Rule 5: fit_calibrator never sees the test snapshot.
     ...

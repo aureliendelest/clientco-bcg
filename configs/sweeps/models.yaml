@@ -2,4 +2,4 @@
 base: configs/experiments/hgb.yaml
 grid:
   model.type: [baseline, logreg, hgb, xgb]
-  label.kind: [class_horizon, relative_horizon]
+  label.kind: [fixed_horizon, relative_horizon]   # labels A and B, both evaluated against the 180-day truth

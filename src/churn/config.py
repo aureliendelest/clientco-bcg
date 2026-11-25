@@ -49,26 +49,30 @@ class SnapshotsCfg:
     lookback_days: int = 180  # features use history strictly before the snapshot date
     step: Literal["monthly", "weekly"] = "monthly"
     train_start: str = "2025-03-22"  # shifted dates
-    train_end: str = "2025-09-22"
+    # Last training snapshot. None = derived: the last monthly date <= test_date - label wait
+    # (22/09/2025 for label A, 22/12/2025 for label B), so that every training label is known before the test.
+    train_end: str | None = None
     test_date: str = "2026-03-22"  # never touched during development
-    embargo_days: int = 180  # train label windows must end before the test date
     feature_set: str = "basic"
 
 
 @dataclass
 class LabelCfg:
-    kind: Literal["class_horizon", "relative_horizon", "durable_drop"] = "class_horizon"
-    # Step 1: horizon per rhythm class, in days (starting values, to calibrate on data)
-    class_horizons: dict[str, int] = field(
-        default_factory=lambda: {"fast": 30, "medium": 60, "slow": 120, "short_history": 180}
-    )
+    # fixed_horizon    = label A: lost = no purchase within `horizon_days` (180) for every client
+    # relative_horizon = label B: lost = no purchase within H_i = clip(k * p90_gap_i, h_min, h_max)
+    # partial_drop     = second score: revenue after T below `drop_threshold` x revenue before T, with a purchase
+    kind: Literal["fixed_horizon", "relative_horizon", "partial_drop"] = "fixed_horizon"
+    horizon_days: int = 180
+    k: float = 3.0
+    h_min: int = 45
+    h_max: int = 90
+    drop_threshold: float = 0.5
+    # Evaluation truth, whatever the training label: "gone" = no purchase within `truth_days`.
+    truth_days: int = 180
+    # Perimeter: regular clients (>= min_purchases purchase days over lookback_days, median gap <= max_median_gap_days)
+    min_purchases: int = 6
+    max_median_gap_days: int = 30
     rhythm_bounds_days: dict[str, int] = field(default_factory=lambda: {"fast_max": 7, "medium_max": 30})
-    # Step 2: relative horizon H_i = clip(k * p90_gap_i, h_min, h_max)
-    k: float = 2.0
-    h_min: int = 30
-    h_max: int = 180
-    min_purchases: int = 6  # rhythm features need at least this many purchases
-    drop_threshold: float = 0.5  # durable_drop variant
 
 
 @dataclass
@@ -81,40 +85,25 @@ class ModelCfg:
     segment_by: Literal["frequency", "value"] = "frequency"
     tuning: bool = False  # Optuna, once the best model family is chosen
     tuning_trials: int = 50
-    cv_folds: int = 5  # grouped by client (an internal embargo is impossible on 6 months)
-
-
-@dataclass
-class TierCfg:
-    name: str
-    share_of_reps: float
-    actions_per_week: int
-    channel: str
+    cv_folds: int = 5  # grouped by client (a temporal gap inside the training window is impossible on 6 months)
 
 
 @dataclass
 class ScoringCfg:
     # V = revenue the client would generate if he stayed (NOT a forecast of realized revenue)
     value_definition: Literal["ca_180d_annualized", "ca_12m"] = "ca_180d_annualized"
-    # Haircut on V: a saved at-risk client buys less than before
-    rho_method: Literal["rebound_calibrated", "fixed"] = "rebound_calibrated"
-    rho_fixed_value: float = 1.0
-    rho_drop_threshold: float = 0.5  # clients that dropped by more than this without leaving
     min_proba: float = 0.0  # minimal calibrated probability to be listed
-    n_reps: int = 200
-    # Team hypothesis, to confirm at tutoring: a share of reps is dedicated to churn
-    tiers: list[TierCfg] = field(
-        default_factory=lambda: [
-            TierCfg(name="dedicated", share_of_reps=0.2, actions_per_week=10, channel="visit_or_call"),
-            TierCfg(name="general", share_of_reps=0.8, actions_per_week=5, channel="call"),
-        ]
-    )
+    # Capacity, team hypothesis (to confirm at tutoring): 100 reps x 5 calls a week, company-wide.
+    calls_per_week: int = 500
+    dataset_share: float = 0.30  # the dataset is ~30 % of revenue: K for the dataset = monthly calls x share
+    list_size_k: int = 700  # monthly list at dataset scale (600 to 760 calls a month)
+    total_share_of_list: float = 0.25  # share of the places reserved to the total-churn score (rest: partial score)
     opportunity_cost_per_action: float | None = None  # team hypothesis, unknown
 
 
 @dataclass
 class EvaluationCfg:
-    k_values: list[int] = field(default_factory=lambda: [2000, 5000, 10000])
+    k_values: list[int] = field(default_factory=lambda: [700, 2000, 4000])  # monthly list, previous tables, six lists
     metrics: list[str] = field(
         default_factory=lambda: ["capture_at_k", "precision", "recall", "f1", "pr_auc", "roc_auc", "brier"]
     )
@@ -140,6 +129,28 @@ class Config:
     scoring: ScoringCfg = field(default_factory=ScoringCfg)
     evaluation: EvaluationCfg = field(default_factory=EvaluationCfg)
     impact: ImpactCfg = field(default_factory=ImpactCfg)
+
+    def label_wait_days(self) -> int:
+        """Days after a snapshot until its training label is known: the training window must end that
+        many days before the test date."""
+        if self.label.kind == "relative_horizon":
+            return self.label.h_max
+        if self.label.kind == "fixed_horizon":
+            return self.label.horizon_days
+        return 180  # partial_drop: window B
+
+    def last_train_date(self) -> str:
+        """`train_end` if given, otherwise the latest monthly snapshot whose label is known before the test."""
+        if self.snapshots.train_end:
+            return self.snapshots.train_end
+        import pandas as pd
+
+        limit = pd.Timestamp(self.snapshots.test_date) - pd.Timedelta(days=self.label_wait_days())
+        d = pd.Timestamp(self.snapshots.train_start)
+        last = d
+        while d <= limit:
+            last, d = d, d + pd.DateOffset(months=1)
+        return f"{last:%Y-%m-%d}"
 
 
 # --------------------------------------------------------------------------- loading
