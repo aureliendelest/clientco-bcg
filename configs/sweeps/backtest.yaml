@@ -1,0 +1,9 @@
+# Rolling backtest (docs/02_modeling_decisions.md, section 10): the 4 model families x labels A and B, evaluated at
+# six decision dates against the common 180-day truth. At each date the model is trained on the monthly snapshots
+# whose label is known before that date (the last training date is derived from `snapshots.test_date`).
+# The test snapshot (2026-03-22) is NOT in the grid: it is run once, after the configuration is frozen.
+base: configs/experiments/hgb.yaml
+grid:
+  model.type: [baseline, logreg, hgb, xgb]
+  label.kind: [fixed_horizon, relative_horizon]
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]
