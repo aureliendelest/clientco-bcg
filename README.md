@@ -12,22 +12,30 @@ src/churn/       the `churn` package (skeleton: bricks are stubs to be filled in
   data.py        ingestion (CSV -> shifted Parquet) and DuckDB access
   snapshots.py   snapshot tables: features, labels, segments, temporal splits
   models.py      registry (baseline, logreg, HistGradientBoosting, XGBoost), calibration, tuning
-  scoring.py     value at risk V, haircut rho, expected value, capacity tiers, reasons, batch list
+  scoring.py     value at risk V, expected value (P x V), list size K, mixed list, reasons, batch list
   evaluation.py  metrics (from saved predictions) and impact simulation
   pipeline.py    run, sweep, collect
 tests/           anti-leakage and unit tests
-notebooks/       exploration notebooks and report.ipynb (reads results/ only)
+notebooks/       numbered analysis notebooks 01-08 and experiment_report.ipynb (reads results/ only)
 docs/            documentation (French); the case brief itself lives in docs/subject/ (not versioned)
 data/            raw and derived data (not versioned)
 runs/            one folder per run (not versioned)
 results/         tables merged by `churn collect`, read by the report notebook
 ```
 
-Notebooks:
+Notebooks (French, run top to bottom, outputs are embedded):
 
-- `notebooks/churn_exploration_viz.ipynb`: visual exploration of the dataset for the churn-prevention use case (data quality, client behaviour, churn definition, value at stake, early-warning signals, baseline score). Run top to bottom; outputs are embedded.
-- `notebooks/exploratory_and_data_update.ipynb`: initial exploratory analysis and data update of the sales dataset.
-- `notebooks/report.ipynb`: figures and tables of the experiments; reads `results/` only.
+| Notebook | Content |
+|---|---|
+| `01_data_quality_and_activity_overview` | Data quality, activity overview (channels, branches, products) |
+| `02_clients_rhythm_and_churn_definition` | Who the clients are, purchase rhythm, what a lost client is, revenue at stake |
+| `03_churn_drivers_early_signals_baseline` | Cohorts, where churn concentrates, early-warning signals, baseline score |
+| `04_churn_scope_total_vs_partial` | Model scope: total vs partial churn, segments, regular clients on 180 days |
+| `05_label_test_and_list_allocation` | Total vs partial label test, net margin, split of the list K |
+| `06_label_horizon_calibration` | Training-label horizon: 41 rules, label A vs relative label B |
+| `07_realized_revenue_loss` | Revenue actually lost by churned clients (haircut of the total-churn revenue) |
+| `08_label_rolling_backtest` | Labels A and B in a rolling backtest (monthly retraining) |
+| `experiment_report` | Figures and tables of the experiments; reads `results/` only |
 
 The raw transaction data (`dataset_sales_2026.csv`, ~4 GB) is not versioned; place it in `data/` or at the repo root.
 
@@ -45,7 +53,7 @@ python -m ipykernel install --user --name clientco-bcg
 
 Then open a notebook and select the `.venv` / `clientco-bcg` kernel.
 
-`notebooks/churn_exploration_viz.ipynb` converts the 4 GB CSV into `data/sales.parquet` on its first run (~1 min, not versioned); later runs reuse it. All heavy aggregation is done in DuckDB, so ~8 GB of RAM is enough.
+`notebooks/01_data_quality_and_activity_overview.ipynb` converts the 4 GB CSV into `data/sales.parquet` on its first run (~1 min, not versioned); later runs reuse it. All heavy aggregation is done in DuckDB, so ~8 GB of RAM is enough.
 
 ## Usage
 
@@ -64,4 +72,19 @@ The commands are in place but most bricks are still stubs: they exit with `not i
 
 ## Documentation
 
-See [docs/churn_enjeux_decisions_vigilances.md](docs/churn_enjeux_decisions_vigilances.md) (French): issues, decisions, vigilances and open questions.
+All documents are in French and live in `docs/`, numbered in reading order. Each fact has one home; the others link to it.
+
+| Doc | Content |
+|---|---|
+| [01_start_here.md](docs/01_start_here.md) | The case, the mission, deadlines, where we are, team rules, reading order |
+| [02_modeling_decisions.md](docs/02_modeling_decisions.md) | **Modelling decisions, current state (single source of truth)** |
+| [03_evidence.md](docs/03_evidence.md) | The numbers behind each decision (lemmas 1 to 7, each tied to a notebook) |
+| [04_data_findings.md](docs/04_data_findings.md) | What the data says: concentration, rhythm, signals, seasonality, anomalies |
+| [05_impact_and_pilot.md](docs/05_impact_and_pilot.md) | Impact in M EUR, retention scenarios, plans A and B, pilot |
+| [06_engineering.md](docs/06_engineering.md) | Code architecture, commands, interface contracts, implementation order |
+| [07_risks_and_open_questions.md](docs/07_risks_and_open_questions.md) | Vigilances, open questions, next steps |
+| [08_decision_log.md](docs/08_decision_log.md) | Dated history of decisions and corrections |
+| [09_presentation_notes.md](docs/09_presentation_notes.md) | Deck storyline, justification speech, likely questions |
+| [glossary.md](docs/glossary.md) | Project vocabulary |
+
+New to the project? Start with [docs/01_start_here.md](docs/01_start_here.md), then [docs/02_modeling_decisions.md](docs/02_modeling_decisions.md).
