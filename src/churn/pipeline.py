@@ -10,6 +10,7 @@ Metrics are NOT computed in a run: `collect` computes them from predictions with
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import json
 import pickle
 import platform
@@ -17,7 +18,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,7 @@ import yaml
 from threadpoolctl import threadpool_limits
 
 from churn import models
-from churn.config import ROOT, RUNS_DIR, Config, config_hash, config_to_dict, resolve
+from churn.config import ROOT, RUNS_DIR, Config, config_hash, config_to_dict, load_config, override_config, resolve
 from churn.config import run_id as make_run_id
 from churn.data import fingerprint
 from churn.scoring import expected_value
@@ -197,13 +198,55 @@ def run(cfg: Config, *, force: bool = False, runs_dir: Path | None = None) -> Pa
 
 
 def expand_sweep(sweep_path: str | Path) -> list[Config]:
-    """Expand the grid into one validated `Config` per combination, each with a distinct `name`."""
-    raise NotImplementedError("pipeline.expand_sweep")
+    """Expand the grid into one validated `Config` per combination, each with a distinct `name`.
+
+    The name is `<sweep file name>__<path>-<value>__...`, in the order of the grid (the first key varies slowest),
+    so a run folder says what changed. A grid key is a dot path in the configuration; its value is a non-empty
+    list of distinct values. `name` cannot be swept. An empty grid gives the base experiment alone."""
+    path = resolve(sweep_path)
+    spec = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    unknown = set(spec) - {"base", "grid"}
+    if unknown:
+        raise ValueError(f"{path.name}: unknown key(s) {sorted(unknown)}; a sweep has `base` and `grid`")
+    if "base" not in spec:
+        raise ValueError(f"{path.name}: missing `base` (path of the base experiment)")
+    grid = spec.get("grid") or {}
+    for key, values in grid.items():
+        if key == "name":
+            raise ValueError(f"{path.name}: `name` is set by the sweep and cannot be in the grid")
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"{path.name}: grid[{key!r}] must be a non-empty list")
+        if len({json.dumps(v, sort_keys=True, default=str) for v in values}) != len(values):
+            raise ValueError(f"{path.name}: grid[{key!r}] has duplicate values")
+
+    base = load_config(spec["base"])
+    configs = []
+    for combo in itertools.product(*grid.values()):
+        # YAML reads an unquoted 2025-09-22 as a date object; the configuration holds ISO strings
+        overrides = {k: v.isoformat() if isinstance(v, date) else v for k, v in zip(grid, combo)}
+        label = "__".join(f"{key}-{value}" for key, value in overrides.items())
+        name = "__".join([path.stem, label]) if label else path.stem
+        safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in name)
+        configs.append(override_config(base, overrides | {"name": safe}))
+    return configs
 
 
-def run_sweep(sweep_path: str | Path, *, force: bool = False) -> list[Path]:
-    """Run every configuration of the sweep and return the run folders."""
-    raise NotImplementedError("pipeline.run_sweep")
+def run_sweep(sweep_path: str | Path, *, force: bool = False, runs_dir: Path | None = None) -> list[Path]:
+    """Run every configuration of the sweep and return the run folders (in the order of `expand_sweep`).
+
+    A run whose folder already exists is skipped unless `force`. The first failure stops the sweep: the runs
+    already written are kept, so a second call resumes where the first stopped."""
+    configs = expand_sweep(sweep_path)
+    root = Path(runs_dir) if runs_dir is not None else RUNS_DIR
+    folders = []
+    for i, cfg in enumerate(configs, 1):
+        skipped = (root / make_run_id(cfg)).exists() and not force
+        print(f"[{i}/{len(configs)}] {cfg.name}: {'skipped (exists)' if skipped else 'running'}", flush=True)
+        t = time.time()
+        folders.append(run(cfg, force=force, runs_dir=runs_dir))
+        if not skipped:
+            print(f"[{i}/{len(configs)}] {cfg.name}: done in {time.time() - t:.0f}s", flush=True)
+    return folders
 
 
 # ----------------------------------------------------------------------------- collect

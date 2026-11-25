@@ -202,6 +202,21 @@ def load_config(path: str | Path) -> Config:
     return _build(Config, _read_yaml(resolve(path)))
 
 
+def override_config(cfg: Config, overrides: dict[str, Any]) -> Config:
+    """A copy of `cfg` with dot-path overrides applied (`{"model.type": "xgb", "label.k": 2.0}`), validated like a
+    YAML file: an unknown option is an error. A path may go inside a free-form dict (`model.params.max_iter`)."""
+    data = config_to_dict(cfg)
+    for path, value in overrides.items():
+        *parents, leaf = path.split(".")
+        node = data
+        for key in parents:
+            node = node.setdefault(key, {})
+            if not isinstance(node, dict):
+                raise ValueError(f"Cannot override {path!r}: {key!r} is not a section")
+        node[leaf] = copy.deepcopy(value)
+    return _build(Config, data)
+
+
 def config_to_dict(cfg: Config) -> dict[str, Any]:
     """Plain-dict view of a configuration (hashing and `runs/<id>/config.yaml`)."""
     return dataclasses.asdict(cfg)
