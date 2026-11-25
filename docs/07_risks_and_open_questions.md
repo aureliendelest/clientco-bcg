@@ -41,6 +41,10 @@ Vigilances ajoutées le 24/11 :
 - **Effet de taille.** Près des trois quarts du CA capté par le modèle partiel (113 M€ sur 156 M€) viennent de la seule taille des clients. Parade : toujours comparer au repère « taille seule ».
 - **Échelle de la capacité.** Les listes sont calculées sur le dataset (≈ 30 % du CA) et la capacité d'appels vaut pour l'entreprise : les mélanger surestime K d'un facteur ≈ 3. Parade : convertir (K ≈ 700 et 4 000 pour 500 appels par semaine).
 - **Une seule photo de test.** Le bootstrap mesure le bruit d'échantillonnage, pas la variation d'une saison à l'autre ; aucune photo d'entraînement ne part de novembre-décembre, où les taux de churn sont plus élevés. Parade : le dire dans le deck, pas de variable « mois ».
+- **Test non vierge sur la période.** Le plan glissant du notebook `08` (22/09/2025 au 22/03/2026 en dates décalées) contient la date de test, et les labels de ses dates s'étendent sur la période de test. Parade : la date de test est exclue des dates de décision, le choix A/B (section 9 de `02_modeling_decisions.md`) n'est pas rouvert après le test, et le résidu est dit dans le deck.
+- **Comparaison à réglages par défaut.** Elle avantage les familles déjà bien réglées d'origine (HGB face à la régression logistique). Parade : si deux familles sont proches, leur donner le même effort de réglage.
+- **Optuna voit des données plus récentes que les premières dates du plan glissant.** Le plan glissant rejoué avec ces hyperparamètres est un peu optimiste ; le test n'est pas touché (Optuna n'utilise que l'entraînement). Parade : présenter le plan glissant comme un outil de choix, pas comme une performance.
+- **Dérive de calibration en production.** Le taux de départ change avec la saison, ce qui décale les probabilités absolues. Le classement par `P × V` est peu touché, pas un chiffre de CA attendu en valeur absolue. Parade : réentraînement mensuel et suivi mois par mois (probabilité prédite contre départs réels).
 - **Label durable non validable.** Une seule photo possible, donc pas de découpage temporel ; il ne sert qu'au dimensionnement.
 - **Reproductibilité.** Un achat retourné laisse un net de ±1e-13 et DuckDB ne garantit pas l'ordre des lignes : sans seuil de 1 centime ni tri par client, deux exécutions donnaient 118 287 puis 118 271 clients. Parade : seuil et tri dans le code, à porter dans `src/churn/`.
 - **Quota du total et chiffre de tête.** Avec 25 % des places, le total capte 40 à 45 % (K ≈ 1 000 à 1 400) de son CA en jeu au lieu de 56 à 61 % : le chiffre de tête est plus bas que celui d'une liste entièrement dédiée au total. Parade : annoncer les deux chiffres.
@@ -75,7 +79,7 @@ Trois décisions attendent une réponse de l'équipe, et neuf questions sont à 
 ### Tour de questions à venir
 
 - Métrique commune d'évaluation et taille du top-K : CA réellement perdu capté dans les K premiers clients, rapporté au CA total perdu. **Traité** : mesure retenue, avec le repère « taille seule » ; K ≈ 700 et 4 000 pour 500 appels par semaine (hypothèse).
-- Découpage de validation, compatible avec l'horizon des labels. **Appliqué** : 7 photos d'entraînement (label A) ou 10 (label B), test au 22/03/2026.
+- Découpage de validation, compatible avec l'horizon des labels. **Appliqué** : 7 photos d'entraînement (label A) ou 10 (label B), test au 22/03/2026. Protocole (plan glissant, CV groupée par client à l'intérieur, Optuna une fois, test une fois) : section 10 de `02_modeling_decisions.md`.
 - Tests anti-fuite et de cohérence des labels.
 - Simulation d'impact : scénarios de rétention, par exemple trois scénarios ou une simulation de Monte Carlo.
 - Architecture cible du cas réel (scoring hebdomadaire, suivi de dérive, journalisation du pilote).

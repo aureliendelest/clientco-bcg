@@ -55,7 +55,7 @@ Total, partiel et interruption s'excluent ; le durable est un sous-ensemble du p
 ## 5. Découpage et cadence
 
 - **Photos mensuelles** : variables calculées avant la date, label après. Les 6 premiers mois ne servent qu'aux variables.
-- **Entraînement** : photos du 22/03/2025 au 22/09/2025 (7 photos, label A) ou jusqu'au 22/12/2025 (10 photos, label B) ; `train_end` est dérivé du label dans la configuration. **Test** : 22/03/2026, jamais touché pendant le développement.
+- **Entraînement** : photos du 22/03/2025 au 22/09/2025 (7 photos, label A) ou jusqu'au 22/12/2025 (10 photos, label B) ; `train_end` est dérivé du label dans la configuration. **Test** : 22/03/2026, jamais touché pendant le développement (protocole et réserves : sections 10 et `07_risks_and_open_questions.md`).
 - **Règle** : le label le plus long d'une photo d'entraînement doit être connu avant la date de test.
 - **Cadence** : entraînement mensuel, scoring hebdomadaire (hypothèse ; photos hebdomadaires = 3,8 fois plus de lignes pour la même qualité). Plan glissant pour la valider.
 - **Reproductibilité** : lignes triées par client, un seul thread.
@@ -89,7 +89,36 @@ Plan glissant, réentraînement mensuel, 7 dates de test, vérité commune (`08_
 
 **Décision : A et B sont gardés.** A reste la référence (une seule définition de la perte, entraînement et vérité identiques) ; B est l'alternative qui capte un peu plus de CA. Les deux sont lancés et comparés dans les sweeps (`label.kind`).
 
-## 10. Questions ouvertes
+## 10. Protocole de validation et de réglage
+
+En production, on apprend sur le passé pour prédire l'avenir : toute mesure de performance respecte l'ordre du temps. Deux boucles emboîtées, chacune pour ce qu'elle sait mesurer.
+
+| Boucle | Découpage | Rôle |
+|---|---|---|
+| **Extérieure : plan glissant** | Par date : à chaque date `T_v`, entraînement sur les photos dont le label est connu avant `T_v`, évaluation sur `T_v` contre la vérité à 180 jours | Choisir : famille de modèle, label A ou B, jeu de variables. Seule source des chiffres de performance |
+| **Intérieure : CV groupée par client** | 5 plis (`cv_folds`), toutes les photos d'un client dans le même pli | Régler et calibrer à l'intérieur de l'entraînement : prédictions hors-pli, calibrateur isotonique par segment |
+
+**Déroulé**
+
+1. **Plan glissant**, 6 à 7 dates. À chaque date : CV groupée sur les photos disponibles, calibrateur appris sur les prédictions hors-pli, réentraînement sur toutes ces photos, prédiction et évaluation de `T_v`. Hyperparamètres par défaut. Les clients de `T_v` ne servent jamais à entraîner ni à calibrer.
+2. **Choix** de la famille, du label et des variables sur la moyenne des dates (bootstrap sur les clients, plusieurs graines).
+3. **Optuna, une seule fois**, sur le modèle retenu : CV groupée sur la fenêtre d'entraînement du test, test jamais utilisé. Hyperparamètres ensuite figés.
+4. **Facultatif** : rejouer le plan glissant avec ces hyperparamètres pour mesurer le gain d'Optuna.
+5. **Gel de la configuration**, puis **test du 22/03/2026, une seule fois**, avec la même procédure (CV, calibration, réentraînement).
+
+**Règles**
+
+- **Une seule fonction d'entraînement** (CV, calibration, réentraînement), appelée à chaque date du plan glissant et pour le modèle final : le backtest évalue exactement la procédure déployée.
+- **Aucun chiffre de performance ne vient de la CV** (elle mélange les dates, donc optimiste) : seuls le plan glissant et le test sont présentés.
+- **Pas de retour sur un choix après le test**, sinon le test devient un outil de réglage.
+- **La date de test est exclue des dates de décision** du plan glissant.
+- **Pas de CV à la place de l'évaluation d'une date** : retirer des clients de l'entraînement mesurerait une situation qui n'existe pas en production (le modèle a déjà vu l'historique des clients qu'il score). Le bootstrap sur les clients donne déjà le bruit d'échantillonnage.
+- **Pas de validation temporelle à l'intérieur de l'entraînement** : le délai de label l'empêche. Avec le label A (180 jours), seule la photo de septembre pourrait être validée, avec une seule photo d'entraînement (mars). Le label B (≤ 90 jours) est moins touché.
+- **Optuna hors de la boucle** : 30 à 50 essais × 5 plis × 7 dates représenterait plusieurs centaines à plus d'un millier d'entraînements (durée non mesurée). Optuna sert au modèle final, pas à comparer des approches.
+
+Limites connues (test non vierge sur la période, réglages par défaut, dérive de calibration) : `07_risks_and_open_questions.md`.
+
+## 11. Questions ouvertes
 
 La liste complète est dans `07_risks_and_open_questions.md`. Les points qui touchent directement ces décisions :
 
