@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.inspection import permutation_importance
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
@@ -212,6 +213,33 @@ def apply_calibrator(calibrator: Calibrator, p_raw: np.ndarray, segment: pd.Seri
             out[mask] = calibrator.models.get(value, calibrator.models[ALL_SEGMENTS]).predict(p_raw[mask])
         return out
     return calibrator.models[ALL_SEGMENTS].predict(p_raw)
+
+
+# ------------------------------------------------------------------------- importances
+
+IMPORTANCE_SAMPLE = 20_000  # rows used for the permutation importance (the full training set would take minutes)
+
+
+def feature_importances(model: Any, X: pd.DataFrame, y: pd.Series, seed: int) -> pd.DataFrame:
+    """Importance of each feature, long table `feature, importance, kind`. The kind depends on the family:
+    `coefficient` (logistic regression, on standardized features: signed, comparable), `gain` (XGBoost),
+    `permutation_ap` (HistGradientBoosting: drop in average precision when the feature is shuffled, measured on
+    a sample of the rows the model was trained on). The rule baselines have none (empty table)."""
+    if isinstance(model, RuleBaseline):
+        values: dict[str, float] = {}
+        kind = "none"
+    elif isinstance(model, XGBClassifier):
+        values, kind = dict(zip(X.columns, model.feature_importances_.astype(float))), "gain"
+    elif hasattr(model, "steps") and isinstance(model[-1], LogisticRegression):
+        names = model[:-1].get_feature_names_out(list(X.columns))
+        values, kind = dict(zip(names, model[-1].coef_[0].astype(float))), "coefficient"
+    else:
+        sample = X.sample(n=min(IMPORTANCE_SAMPLE, len(X)), random_state=seed)
+        res = permutation_importance(
+            model, sample, y.loc[sample.index], scoring="average_precision", n_repeats=3, random_state=seed, n_jobs=1
+        )
+        values, kind = dict(zip(X.columns, res.importances_mean.astype(float))), "permutation_ap"
+    return pd.DataFrame({"feature": list(values), "importance": list(values.values()), "kind": kind})
 
 
 # ------------------------------------------------------------------------------ tuning

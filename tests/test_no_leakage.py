@@ -1,7 +1,7 @@
 """Anti-leakage suite, to run before every sweep (`make test`).
 
-These are the five rules from docs/06_engineering.md (section 5). Rules 3 and 5 are skipped until
-the corresponding bricks (pipeline, calibration) are implemented.
+These are the five rules from docs/06_engineering.md (section 5). Rules 3 and 5 run the pipeline on the small
+synthetic dataset of `conftest.pipeline_cfg`.
 """
 
 from datetime import date
@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from churn.config import Config
-from churn.snapshots import assert_labels_known_before_test, build_snapshot, compute_features, temporal_split
+from churn.snapshots import assert_labels_known_before_test, build_snapshot, compute_features, load_or_build, temporal_split
 from tests.helpers import T, before, every, sales_for
 
 
@@ -64,10 +64,29 @@ def test_temporal_split_refuses_a_training_window_that_reaches_the_test():
     assert cfg.last_train_date() == "2025-12-22"
 
 
-@pytest.mark.skip(reason="stub: pipeline.run not implemented")
-def test_shuffled_labels_give_auc_near_half():
-    # Rule 3: after shuffling the training labels, the test ROC-AUC must stay close to 0.5.
-    ...
+def test_shuffled_labels_give_auc_near_half(pipeline_cfg):
+    # Rule 3: a model trained on shuffled labels has nothing to say about the test snapshot. One shuffled model is a
+    # random direction in a space where recency carries the whole signal, so its AUC is near 0.1 or 0.9 depending on
+    # the sign of the noise: the expectation is 0.5 over many shuffles. A leak of the labels into the features or
+    # the split would keep every shuffled AUC far above 0.5.
+    import dataclasses
+
+    from sklearn.metrics import roc_auc_score
+
+    from churn.config import ModelCfg
+    from churn.pipeline import fit_predict
+
+    cfg = dataclasses.replace(pipeline_cfg, model=ModelCfg(type="logreg", calibration="none"))
+    train, test = temporal_split(load_or_build(cfg), cfg)
+    real = fit_predict(cfg, train, {"test": test}).predictions
+    assert roc_auc_score(real["gone"], real["p_raw"]) > 0.8  # the synthetic signal is there...
+    aucs = []
+    for seed in range(30):
+        shuffled = train.assign(label=np.random.default_rng(seed).permutation(train["label"].to_numpy()))
+        fake = fit_predict(cfg, shuffled, {"test": test}).predictions
+        aucs.append(roc_auc_score(fake["gone"], fake["p_raw"]))
+    assert 0.35 < np.mean(aucs) < 0.65  # ...and it needs the true labels
+    assert min(aucs) < 0.5 < max(aucs)
 
 
 def test_rhythm_features_use_only_prior_purchases_and_need_min_purchases(sales_con):
@@ -87,7 +106,17 @@ def test_rhythm_features_use_only_prior_purchases_and_need_min_purchases(sales_c
     pd.testing.assert_series_equal(feats.loc[ids["on_day_T"]], feats.loc[ids["six"]], check_names=False)
 
 
-@pytest.mark.skip(reason="stub: needs pipeline.run (the calibrator itself only sees the data it is given)")
-def test_calibration_is_fitted_without_test_data():
-    # Rule 5: fit_calibrator never sees the test snapshot.
-    ...
+def test_calibration_is_fitted_without_test_data(pipeline_cfg):
+    # Rule 5: the calibrator (like the model) never sees the test snapshot: changing the test labels, or adding other
+    # targets to score, leaves the test predictions untouched.
+    from churn.pipeline import fit_predict
+
+    train, test = temporal_split(load_or_build(pipeline_cfg), pipeline_cfg)
+    base = fit_predict(pipeline_cfg, train, {"test": test}).predictions
+    rng = np.random.default_rng(1)
+    altered = test.assign(label=rng.permutation(test["label"].to_numpy()), gone=rng.permutation(test["gone"].to_numpy()))
+    other = fit_predict(pipeline_cfg, train, {"test": altered, "extra": test.head(50)}).predictions
+    pd.testing.assert_frame_equal(
+        base[["client_id", "p_raw", "p_cal"]].reset_index(drop=True),
+        other.loc[other["split"] == "test", ["client_id", "p_raw", "p_cal"]].reset_index(drop=True),
+    )

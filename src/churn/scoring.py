@@ -40,7 +40,7 @@ def compute_value(df: pd.DataFrame, cfg: Config) -> pd.Series:
 
 def expected_value(p_cal: pd.Series, value: pd.Series) -> pd.Series:
     """EV = p_cal * V."""
-    raise NotImplementedError("scoring.expected_value")
+    return (p_cal * value).rename("ev")
 
 
 def apply_min_proba(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
