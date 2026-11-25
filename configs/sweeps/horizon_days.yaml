@@ -1,0 +1,9 @@
+# Duration of the training label A (docs/03_evidence.md, lemma 7): fewer training photos when the label is long,
+# more false "lost" when it is short. The truth stays at 180 days (`label.truth_days`), so every duration is
+# evaluated on the same event. 180 days is the label A run of backtest.yaml. Models: the two best families.
+base: configs/experiments/hgb.yaml
+grid:
+  label.kind: [fixed_horizon]
+  label.horizon_days: [60, 90, 120, 150]
+  model.type: [hgb, xgb]
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]
