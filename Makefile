@@ -4,8 +4,9 @@ PY := .venv/bin/python
 CONFIG ?= configs/experiments/baseline.yaml
 SWEEP ?= configs/sweeps/models.yaml
 
-setup:        ## Install the package in editable mode with dev dependencies
-	$(PY) -m pip install -e ".[dev]"
+setup:        ## Install the pinned versions (requirements.txt), then the package itself
+	$(PY) -m pip install -r requirements.txt
+	$(PY) -m pip install -e . --no-deps
 
 test:         ## Run the test suite (leakage tests first)
 	$(PY) -m pytest

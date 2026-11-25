@@ -65,7 +65,7 @@ src/churn/
   config.py     configuration typée, chargement YAML, identifiant de run
   data.py       ingestion CSV → Parquet décalé, accès DuckDB
   snapshots.py  variables, labels, segments, découpage temporel
-  models.py     baseline, logreg, HGB, XGBoost, calibration, tuning
+  models.py     baseline, BG/NBD, logreg, HGB, XGBoost, calibration, tuning
   scoring.py    V, VE, taille de liste (K), liste mixte, raisons, liste CSV
   evaluation.py métriques (depuis les prédictions) et simulation d'impact
   pipeline.py   run, sweep, collect
@@ -90,7 +90,7 @@ Tant qu'une brique est un stub, la commande répond `not implemented yet` (code 
 
 ### Le contrat d'interface (à respecter, c'est ce qui permet de travailler en parallèle)
 
-- **Table de photo** (`snapshots.py`) : `client_id, snapshot_date, <variables>, label, horizon_days, V, segment`. Variables « basic » : `recency_days, freq_180d, freq_90d, freq_prev_90d, rev_180d, rev_90d, rev_prev_90d, gap_median, gap_p90, recency_ratio, freq_trend, rev_trend`.
+- **Table de photo** (`snapshots.py`) : `client_id, snapshot_date, <variables>, label, horizon_days, V, segment`. Variables « basic » : `recency_days, freq_180d, freq_90d, freq_prev_90d, rev_180d, rev_90d, rev_prev_90d, gap_median, gap_p90, recency_ratio, freq_trend, rev_trend` (les deux tendances sont des log-ratios : 0 = stable, < 0 = baisse).
 - **Table de prédictions** (`evaluation.py`) : `run_id, client_id, snapshot_date, split, p_raw, p_cal, V, ev, label, gone, horizon_days, segment`.
 - **Table de métriques** (`evaluation.evaluate_predictions`, une par run, fusionnée dans `results/metrics.parquet`) : `run_id, split, segment, metric, k, value, ci_low, ci_high`. Segment `all` : `capture_at_k`, `size_only_capture`, `oracle_capture` (une ligne par K de `evaluation.k_values`), `pr_auc`, `brier_raw`, `brier_cal` (`k` vide) ; un segment par valeur de `segment` : probabilités seulement. Définitions et choix dans `02_modeling_decisions.md` § 8 ; la liste des métriques demandées est `evaluation.metrics` (une métrique inconnue ou non implémentée est refusée).
 - **Liste d'action** (`scoring.py`) : `rank, client_id, p_cal, V, ev, segment, score_kind, suggested_channel, reason_1, reason_2, reason_3`.

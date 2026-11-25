@@ -63,7 +63,7 @@ Total, partiel et interruption s'excluent ; le durable est un sous-ensemble du p
 ## 6. Modèle et score
 
 - **Un seul modèle** avec le segment rapide / moyen en variable (pas de modèle par segment, sauf si le résultat déçoit).
-- **Modèles** : baseline (récence ÷ écart p90), régression logistique, HistGradientBoosting, XGBoost ; probabilités calibrées (isotonique). Optuna (30 à 50 essais) une fois le meilleur choisi. Pas de réseau de neurones.
+- **Modèles** : baseline (récence ÷ écart p90), **BG/NBD** (repère statistique, non supervisé : `P(aucun achat sur l'horizon)` à partir de `freq_180d` et `recency_days`, sans le label ; `configs/sweeps/backtest_bgnbd.yaml`), régression logistique, HistGradientBoosting, XGBoost ; probabilités calibrées (isotonique). Optuna (30 à 50 essais) une fois le meilleur choisi. Pas de réseau de neurones.
 - **Variables** : 12 à 13, calculées sur 180 jours (fréquence, CA, tendances, écart médian et p90, récence et récence ÷ p90). Pas de variable « mois ».
 - **Score** : valeur espérée `P(départ) × V`, avec raisons principales ; classement par `p × V` (+15 points de CA capté face au classement par probabilité seule). **La décote ρ est retirée pour l'instant** (elle pourra être remise plus tard).
 

@@ -77,7 +77,7 @@ class LabelCfg:
 
 @dataclass
 class ModelCfg:
-    type: Literal["baseline", "logreg", "hgb", "xgb"] = "hgb"
+    type: Literal["baseline", "bgnbd", "logreg", "hgb", "xgb"] = "hgb"
     params: dict[str, Any] = field(default_factory=dict)
     calibration: Literal["isotonic", "none"] = "isotonic"
     calibration_by_segment: bool = True

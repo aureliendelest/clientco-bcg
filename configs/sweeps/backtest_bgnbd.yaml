@@ -1,0 +1,7 @@
+# BG/NBD in the rolling backtest: the statistical counterpart of the four families of `backtest.yaml`, on the same
+# labels and the same six decision dates, so its rows can be merged with theirs and compared one to one.
+base: configs/experiments/hgb.yaml
+grid:
+  model.type: [bgnbd]
+  label.kind: [fixed_horizon, relative_horizon]
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]

@@ -1,12 +1,18 @@
+# Exact tested versions. Install with: make setup
+# The floors in pyproject.toml must match these pins.
 pandas==3.1.1
 matplotlib==3.11.2
-ipykernel==7.4.0
 duckdb==2.0.0
 numpy==2.5.5
 scikit-learn==1.9.1
+scipy==1.18.1
+threadpoolctl==3.8.0
 xgboost==3.4.1
 optuna==5.1.0
 shap==0.54.1
 PyYAML==6.0.3
 pyarrow==26.0.1
+
+# dev (extra `dev` in pyproject.toml)
+ipykernel==7.4.0
 pytest==9.2.0

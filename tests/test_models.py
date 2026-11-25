@@ -4,9 +4,13 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.base import clone
+from sklearn.metrics import roc_auc_score
 
-from churn.config import ModelCfg
-from churn.models import ALL_SEGMENTS, MIN_SEGMENT_FIT, MODEL_REGISTRY, RuleBaseline, apply_calibrator, fit_calibrator, get_model
+from churn.config import Config, ModelCfg, override_config
+from churn.models import (
+    _DEFAULT_TRIAL, ALL_SEGMENTS, BGNBD, MIN_SEGMENT_FIT, MODEL_REGISTRY, SEARCH_SPACES, RuleBaseline, apply_calibrator,
+    fit_calibrator, get_model, tune,
+)
 from churn.snapshots import FEATURE_SETS
 
 FEATURES = FEATURE_SETS["basic"]
@@ -22,7 +26,7 @@ def _features(n: int = 400, seed: int = 0) -> tuple[pd.DataFrame, pd.Series]:
         "recency_days": recency, "freq_180d": rng.integers(6, 60, n), "freq_90d": rng.integers(0, 30, n),
         "freq_prev_90d": rng.integers(0, 30, n), "rev_180d": rng.uniform(1e3, 1e5, n), "rev_90d": rng.uniform(0, 5e4, n),
         "rev_prev_90d": rng.uniform(0, 5e4, n), "gap_median": gap_p90 / 2, "gap_p90": gap_p90, "recency_ratio": ratio,
-        "freq_trend": rng.uniform(0, 2, n), "rev_trend": rng.uniform(0, 2, n),
+        "freq_trend": rng.uniform(-1, 1, n), "rev_trend": rng.uniform(-1, 1, n),
     })[FEATURES]
     y = pd.Series((rng.uniform(size=n) < 1 / (1 + np.exp(-(ratio - 3)))).astype(int))
     return df, y
@@ -53,9 +57,8 @@ def test_recency_days_rule_ignores_rhythm():
 
 
 def test_business_rules_count_fired_rules_then_break_ties_by_recency():
-    X = pd.DataFrame({
-        "recency_ratio": [0.2, 1.5, 1.5, 3.0], "freq_trend": [1.0, 1.0, 0.3, 0.3], "rev_trend": [1.0, 1.0, 0.3, 0.3],
-    })
+    trend = np.log([1.0, 1.0, 0.3, 0.3])  # the trend features are log-ratios (0 = stable)
+    X = pd.DataFrame({"recency_ratio": [0.2, 1.5, 1.5, 3.0], "freq_trend": trend, "rev_trend": trend})
     s = RuleBaseline(rule="business_rules").score(X)
     assert np.floor(s).tolist() == [0, 1, 3, 3]  # rules fired
     assert s[3] > s[2]  # same count: the more silent client first
@@ -63,7 +66,7 @@ def test_business_rules_count_fired_rules_then_break_ties_by_recency():
 
 
 def test_business_rules_thresholds_are_parameters():
-    X = pd.DataFrame({"recency_ratio": [1.2], "freq_trend": [0.8], "rev_trend": [0.8]})
+    X = pd.DataFrame({"recency_ratio": [1.2], "freq_trend": [np.log(0.8)], "rev_trend": [np.log(0.8)]})
     assert np.floor(RuleBaseline(rule="business_rules").score(X))[0] == 1
     assert np.floor(RuleBaseline(rule="business_rules", ratio_threshold=2.0, trend_threshold=0.9).score(X))[0] == 2
 
@@ -81,6 +84,63 @@ def test_baseline_is_deterministic_and_clonable():
     X, y = _features()
     m = RuleBaseline(rule="business_rules").fit(X, y)
     assert np.array_equal(m.predict_proba(X), clone(m).fit(X, y).predict_proba(X))
+
+
+# ------------------------------------------------------------------------------- BG/NBD
+
+
+def _simulate_bgnbd(n: int, r: float, alpha: float, a: float, b: float, T: int, H: int, seed: int):
+    """Clients simulated from the BG/NBD generative story over a window of T days, then H more days observed.
+    Returns the window features (`freq_180d`, `recency_days`, with a window of T) and whether each bought in the next H."""
+    rng = np.random.default_rng(seed)
+    lam, p = rng.gamma(r, 1 / alpha, n), rng.beta(a, b, n)
+    x, t_x, bought_next = np.zeros(n), np.zeros(n), np.zeros(n, dtype=bool)
+    for i in range(n):
+        t, alive = 0.0, True
+        while True:
+            t += rng.exponential(1 / lam[i])
+            if t > T + H:
+                break
+            if t <= T:
+                x[i] += 1
+                t_x[i] = t
+            else:
+                bought_next[i] = True
+                break
+            if rng.uniform() < p[i]:
+                alive = False
+                break
+        assert alive or not bought_next[i]
+    return pd.DataFrame({"freq_180d": x, "recency_days": np.round(T - t_x)}), bought_next
+
+
+def test_bgnbd_recovers_its_parameters_and_predicts_silence():
+    X, bought_next = _simulate_bgnbd(6000, r=1.5, alpha=30.0, a=0.6, b=2.5, T=180, H=90, seed=0)
+    model = BGNBD(window_days=180, horizon_days=90).fit(X)
+    assert model.params_["r"] == pytest.approx(1.5, rel=0.3)
+    assert model.params_["alpha"] == pytest.approx(30.0, rel=0.3)
+    p = model.predict_proba(X)[:, 1]
+    assert abs(p.mean() - (~bought_next).mean()) < 0.02  # calibrated by construction: the mean matches the silence rate
+    assert roc_auc_score(~bought_next, p) > 0.7
+
+
+def test_bgnbd_risk_grows_with_recency_and_shrinks_with_the_horizon():
+    X, _ = _simulate_bgnbd(3000, r=1.5, alpha=30.0, a=0.6, b=2.5, T=180, H=0, seed=1)
+    model = BGNBD(horizon_days=60).fit(X)
+    quiet = pd.DataFrame({"freq_180d": [12.0] * 4, "recency_days": [2.0, 30.0, 90.0, 170.0]})
+    p = model.predict_proba(quiet)[:, 1]
+    assert (np.diff(p) > 0).all()
+    longer = BGNBD(horizon_days=180).fit(X).predict_proba(quiet)[:, 1]
+    assert (longer <= p).all() and (longer < p).any()  # silence over 180 days implies silence over 60: rarer
+
+
+def test_bgnbd_names_missing_columns_and_rejects_missing_values():
+    X, _ = _features()
+    with pytest.raises(KeyError, match="freq_180d"):
+        BGNBD().fit(X.drop(columns=["freq_180d"]))
+    X.loc[X.index[0], "recency_days"] = np.nan
+    with pytest.raises(ValueError, match="missing"):
+        BGNBD().fit(X)
 
 
 # ---------------------------------------------------------------- the contract of every family
@@ -192,3 +252,50 @@ def test_calibrated_rule_baseline_is_a_usable_probability():
     out = apply_calibrator(fit_calibrator(raw, y.to_numpy(), seg, ModelCfg()), raw, seg)
     assert abs(out.mean() - y.mean()) < 0.01
     assert pd.Series(out).corr(pd.Series(raw), method="spearman") > 0.9
+
+
+# ---- tuning
+
+
+def _tuning_setup(kind: str, trials: int = 4, **params):
+    """A configuration that tunes `kind` and a small training table (two rows per client, all in the perimeter)."""
+    cfg = override_config(Config(), {"model.type": kind, "model.tuning_trials": trials, "model.cv_folds": 3, "seed": 0})
+    if params:
+        cfg = override_config(cfg, {f"model.params.{k}": v for k, v in params.items()})
+    X, y = _features(600)
+    train = X.assign(client_id=np.arange(len(X)) // 2, snapshot_date=pd.Timestamp("2025-03-22"), rhythm="fast", label=y.to_numpy())
+    return cfg, train
+
+
+@pytest.mark.parametrize("kind", ["hgb", "xgb"])
+def test_tune_searches_the_space_and_returns_usable_parameters(kind):
+    cfg, train = _tuning_setup(kind)
+    best = tune(cfg, train)
+    assert set(best) == set(SEARCH_SPACES[kind])
+    for name, (_, low, high, _log) in SEARCH_SPACES[kind].items():
+        assert low <= best[name] <= high
+    model = get_model(ModelCfg(type=kind, params=best), 0).fit(train[FEATURES], train["label"].astype(int))
+    p = model.predict_proba(train[FEATURES])[:, 1]
+    assert ((p >= 0) & (p <= 1)).all()
+
+
+@pytest.mark.parametrize("kind", ["hgb", "xgb"])
+def test_tune_is_reproducible_and_starts_from_the_defaults(kind):
+    cfg, train = _tuning_setup(kind)
+    assert tune(cfg, train) == tune(cfg, train)
+    cfg1, train1 = _tuning_setup(kind, trials=1)
+    assert tune(cfg1, train1) == _DEFAULT_TRIAL[kind]  # the first trial is the untuned configuration
+
+
+def test_tune_leaves_parameters_fixed_in_the_config_alone():
+    cfg, train = _tuning_setup("hgb", max_depth=5)
+    assert "max_depth" not in tune(cfg, train)
+
+
+def test_tune_refuses_families_without_a_search_space_and_unlabelled_rows():
+    cfg, train = _tuning_setup("logreg")
+    with pytest.raises(ValueError, match="Tuning is implemented"):
+        tune(cfg, train)
+    cfg, train = _tuning_setup("hgb")
+    with pytest.raises(ValueError, match="no label"):
+        tune(cfg, train.assign(label=np.nan))

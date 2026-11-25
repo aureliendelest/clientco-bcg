@@ -8,20 +8,22 @@ version = "0.1.0"
 description = "ClientCo churn prevention: reproducible, comparable experiment runs."
 requires-python = ">=3.12"
 dependencies = [
-    "pandas>=3.1",
-    "duckdb>=2.0",
-    "numpy>=2.0",
-    "scikit-learn>=1.9",
-    "xgboost>=3.4",
-    "optuna>=5.0",
-    "shap>=0.54",
-    "PyYAML>=6.0",
-    "pyarrow>=26.0",
-    "matplotlib>=3.11",
+    "pandas>=3.1.1",
+    "duckdb>=2.0.0",
+    "numpy>=2.5.5",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+    "threadpoolctl>=3.8.0",
+    "xgboost>=3.4.1",
+    "optuna>=5.1.0",
+    "shap>=0.54.1",
+    "PyYAML>=6.0.3",
+    "pyarrow>=26.0.1",
+    "matplotlib>=3.11.2",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=9.0", "ipykernel>=7.4"]
+dev = ["pytest>=9.2.0", "ipykernel>=7.4.0"]
 
 [project.scripts]
 churn = "churn.cli:main"

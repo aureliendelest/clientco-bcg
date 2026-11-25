@@ -11,7 +11,7 @@ src/churn/       the `churn` package (data and snapshots implemented; models, pi
   config.py      typed configuration, YAML loading, run id, project paths
   data.py        ingestion (CSV -> shifted Parquet) and DuckDB access
   snapshots.py   snapshot tables: features, labels, segments, temporal splits
-  models.py      registry (baseline, logreg, HistGradientBoosting, XGBoost), calibration, tuning
+  models.py      registry (baseline, BG/NBD, logreg, HistGradientBoosting, XGBoost), calibration, tuning
   scoring.py     value at risk V, expected value (P x V), list size K, mixed list, reasons, batch list
   evaluation.py  metrics (from saved predictions) and impact simulation
   pipeline.py    run, sweep, collect
@@ -47,7 +47,7 @@ Requires Python 3.12.
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt     # exact, tested versions
-pip install -e .                    # the `churn` package (or: make setup)
+pip install -e . --no-deps          # the `churn` package (both steps: make setup)
 python -m ipykernel install --user --name clientco-bcg
 ```
 
