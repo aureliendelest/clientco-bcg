@@ -15,6 +15,29 @@ from churn.pipeline import PREDICTION_COLUMNS, collect, expand_sweep, fit_predic
 from churn.snapshots import in_perimeter, load_or_build, temporal_split
 
 
+def test_final_test_date_is_refused_on_the_real_dataset_without_the_flag(monkeypatch, tmp_path):
+    from churn.config import Config
+    from churn.pipeline import FINAL_TEST_DATE, FINAL_TEST_ENV, _assert_test_allowed
+
+    real = Config()  # default dataset path = the real data, default test date = the final one
+    assert real.snapshots.test_date == FINAL_TEST_DATE
+    monkeypatch.delenv(FINAL_TEST_ENV, raising=False)
+    with pytest.raises(PermissionError, match=FINAL_TEST_ENV):
+        run(real, runs_dir=tmp_path)  # refused before any data is read
+    monkeypatch.setenv(FINAL_TEST_ENV, "1")
+    _assert_test_allowed(real)  # allowed with the flag
+    monkeypatch.delenv(FINAL_TEST_ENV)
+    other = override_config(real, {"snapshots.test_date": "2025-10-22"})
+    _assert_test_allowed(other)  # another date is never refused
+
+
+def test_final_test_date_is_not_refused_on_a_synthetic_dataset(pipeline_cfg, monkeypatch):
+    from churn.pipeline import FINAL_TEST_ENV, _assert_test_allowed
+
+    monkeypatch.delenv(FINAL_TEST_ENV, raising=False)
+    _assert_test_allowed(pipeline_cfg)  # the synthetic dataset is another Parquet file
+
+
 def test_run_writes_the_run_folder(pipeline_cfg, tmp_path):
     out = run(pipeline_cfg, runs_dir=tmp_path)
     assert out == tmp_path / run_id(pipeline_cfg)

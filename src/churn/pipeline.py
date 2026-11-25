@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import json
+import os
 import pickle
 import platform
 import shutil
@@ -30,12 +31,32 @@ import yaml
 from threadpoolctl import threadpool_limits
 
 from churn import models
-from churn.config import RESULTS_DIR, ROOT, RUNS_DIR, Config, config_hash, config_to_dict, load_config, override_config, resolve
+from churn.config import (
+    RESULTS_DIR, ROOT, RUNS_DIR, Config, DatasetCfg, config_hash, config_to_dict, load_config, override_config, resolve,
+)
 from churn.config import run_id as make_run_id
 from churn.data import fingerprint
 from churn.evaluation import evaluate_predictions
 from churn.scoring import expected_value
 from churn.snapshots import FEATURE_SETS, client_group_folds, in_perimeter, load_or_build, temporal_split
+
+FINAL_TEST_DATE = "2026-03-22"  # the test snapshot: run once, after the configuration is frozen
+FINAL_TEST_ENV = "CHURN_FINAL_TEST"
+
+
+def _assert_test_allowed(cfg: Config) -> None:
+    """Refuse a run on the real dataset whose test date is the final test date, unless `CHURN_FINAL_TEST=1`.
+
+    Docs/02_modeling_decisions.md, section 10: the test is never touched during development. A synthetic
+    dataset (another Parquet file) is not concerned: the tests of the package run on it."""
+    real = resolve(DatasetCfg().shifted_parquet)
+    if cfg.snapshots.test_date == FINAL_TEST_DATE and resolve(cfg.dataset.shifted_parquet) == real:
+        if os.environ.get(FINAL_TEST_ENV) != "1":
+            raise PermissionError(
+                f"Refusing to run on the final test date {FINAL_TEST_DATE} with the real dataset: "
+                f"set {FINAL_TEST_ENV}=1 once the configuration is frozen"
+            )
+
 
 PREDICTION_COLUMNS = [
     "run_id", "client_id", "snapshot_date", "split", "p_raw", "p_cal", "V", "ev", "label", "gone", "horizon_days", "segment",
@@ -141,6 +162,7 @@ def run(cfg: Config, *, force: bool = False, runs_dir: Path | None = None) -> Pa
     written under a temporary name and moved in place at the end, so a failed run leaves nothing behind.
     `runs_dir` replaces the default `runs/` (used by the tests).
     """
+    _assert_test_allowed(cfg)
     started = time.time()
     rid = make_run_id(cfg)
     root = Path(runs_dir) if runs_dir is not None else RUNS_DIR
