@@ -1,5 +1,6 @@
 # Display texts for the sales reps (French, deliverable). Keys = English feature names.
 # Placeholders in braces are filled from the client's own values.
+# freq_trend and rev_trend are log-ratios: the "baisse de {value} %" value is 100 * (1 - exp(trend)).
 recency_days: "Aucun achat depuis {value} jours"
 recency_ratio: "Silence de {value} fois son rythme habituel"
 freq_trend: "Fréquence d'achat en baisse de {value} % sur 90 jours"

@@ -89,6 +89,24 @@ def test_every_feature_of_the_set_is_produced(sales_con):
     assert len(out) == 1
 
 
+def test_trends_are_log_ratios_that_stay_finite_and_signed(sales_con):
+    # freq_trend / rev_trend = log(1 + recent 90 days) - log(1 + previous 90 days): 0 = stable, < 0 = decline,
+    # and no explosion when the previous window is empty (a plain ratio went to millions on revenue).
+    con = sales_con(sales_for({
+        "stable": every("2024-10-20", "2025-04-14", 6),
+        "declining": every("2024-10-20", "2025-01-14", 3) + ["2025-03-01"],
+        "new_after_gap": every("2025-01-20", "2025-04-14", 3),  # nothing in the previous window
+    }))
+    out = compute_features(con, T, "basic").set_index("client_id")
+    ids = sales_for.ids
+    assert np.isfinite(out[["freq_trend", "rev_trend"]]).all().all()
+    for column, recent, previous in (("freq_trend", "freq_90d", "freq_prev_90d"), ("rev_trend", "rev_90d", "rev_prev_90d")):
+        assert np.allclose(out[column], np.log1p(out[recent]) - np.log1p(out[previous]))
+    assert abs(out.loc[ids["stable"], "freq_trend"]) < 0.2
+    assert out.loc[ids["declining"], "freq_trend"] < -1.0
+    assert out.loc[ids["new_after_gap"], "freq_trend"] > 1.0
+
+
 def test_snapshot_columns_match_the_contract(sales_con):
     # client_id, snapshot_date, <features>, label, horizon_days, V, segment
     con = sales_con(sales_for({"a": every("2025-01-01", "2025-12-31", 5)}))

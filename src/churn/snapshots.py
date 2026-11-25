@@ -14,7 +14,6 @@ import hashlib
 import json
 from collections.abc import Callable, Iterator
 from datetime import date, timedelta
-from pathlib import Path
 
 import duckdb
 import numpy as np
@@ -24,7 +23,7 @@ from churn.config import PROCESSED_DIR, Config, LabelCfg, config_to_dict, resolv
 from churn.data import build_client_day_table, connect, fingerprint
 from churn.scoring import compute_value
 
-SNAPSHOT_VERSION = 1  # bump when the content of a snapshot changes for a given config: invalidates the cache
+SNAPSHOT_VERSION = 2  # v2: freq_trend and rev_trend became log-ratios. Bump when the content of a snapshot changes for a given config: invalidates the cache
 PERIMETER_RHYTHMS = ("fast", "medium")  # regular clients: the perimeter of the model
 
 # ------------------------------------------------------------------------------ build
@@ -128,8 +127,8 @@ FEATURE_SETS: dict[str, list[str]] = {
         "gap_median",
         "gap_p90",
         "recency_ratio",  # recency / gap_p90, only with enough purchase history
-        "freq_trend",  # freq_90d / (freq_prev_90d + 1)
-        "rev_trend",
+        "freq_trend",  # log(1 + freq_90d) - log(1 + freq_prev_90d): 0 = stable, < 0 = decline
+        "rev_trend",  # same on revenue
     ],
     # Planned extensions (not implemented): returns share, channel mix, number of branches,
     # basket diversity, month indicator. Never a day-of-week feature (dates are shifted).
@@ -168,8 +167,10 @@ def _aggregates(con: duckdb.DuckDBPyConnection, snapshot_date: date, lookback_da
                coalesce(sum(rev) FILTER (WHERE d <  DATE '{t}' - {half}), 0) AS rev_prev_90d
         FROM hist GROUP BY client_id ORDER BY client_id""").fetchdf()
     df["recency_ratio"] = df["recency_days"] / df["gap_p90"].clip(lower=1)
-    df["freq_trend"] = df["freq_90d"] / (df["freq_prev_90d"] + 1)
-    df["rev_trend"] = df["rev_90d"] / (df["rev_prev_90d"] + 1)
+    # Log-ratios: 0 = stable, < 0 = decline, symmetric, and bounded by the log of the largest value (a plain ratio
+    # exploded when the previous revenue was close to zero: max 2 million). `log1p` also handles the zeros.
+    df["freq_trend"] = np.log1p(df["freq_90d"]) - np.log1p(df["freq_prev_90d"])
+    df["rev_trend"] = np.log1p(df["rev_90d"]) - np.log1p(df["rev_prev_90d"])
     too_short = df["freq_180d"] < min_purchases  # gaps are not reliable below `min_purchases` purchase days
     df.loc[too_short, list(_RHYTHM_FEATURES)] = np.nan
     return df
