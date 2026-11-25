@@ -221,14 +221,3 @@ def test_evaluate_predictions_rejects_unknown_metrics_and_mixed_runs():
         evaluate_predictions(_random_pred(50), cfg)
     with pytest.raises(ValueError, match="one run"):
         evaluate_predictions(pd.concat([_random_pred(50), _random_pred(50, run_id="other")]), Config())
-
-
-@pytest.mark.skip(reason="stub: evaluation.threshold_metrics not implemented")
-def test_threshold_metrics_on_a_toy_example():
-    # precision, recall and F1 computed by hand on 6 clients.
-    ...
-
-
-@pytest.mark.skip(reason="stub: evaluation.tornado_table not implemented")
-def test_tornado_is_sorted_by_amplitude():
-    ...

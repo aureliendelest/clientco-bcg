@@ -30,7 +30,8 @@ def _cmd_sweep(args: argparse.Namespace) -> None:
 def _cmd_collect(args: argparse.Namespace) -> None:
     from churn.pipeline import collect
 
-    collect()
+    prefixes = tuple(args.universe or ())
+    collect(universe_for=(lambda cfg: cfg.name.startswith(prefixes)) if prefixes else None)
 
 
 def _cmd_score(args: argparse.Namespace) -> None:
@@ -61,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_sweep)
 
     p = sub.add_parser("collect", help="Merge all runs/ into results/*.parquet.")
+    p.add_argument(
+        "--universe", nargs="+", metavar="PREFIX",
+        help="Also compute the total-churn metrics (whole client base as denominator) for the runs whose name starts "
+        "with one of these prefixes (15 to 25 s per run).",
+    )
     p.set_defaults(func=_cmd_collect)
 
     p = sub.add_parser("score", help="Write the weekly action list (CSV) for a run and a snapshot date.")
@@ -75,8 +81,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         args.func(args)
-    except NotImplementedError as exc:
-        print(f"churn {args.command}: not implemented yet ({exc})", file=sys.stderr)
+    except (FileNotFoundError, ValueError, PermissionError) as exc:
+        print(f"churn {args.command}: {exc}", file=sys.stderr)
         return 2
     return 0
 

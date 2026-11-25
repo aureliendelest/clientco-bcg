@@ -19,7 +19,21 @@ K is the same for every run (`evaluation.k_values`, headline K = 700). With seve
 the top K is taken per date and the revenues are pooled. Per-segment rows only carry the probability metrics
 (pr_auc, brier): a top K inside a segment would not be the list the reps receive.
 Confidence intervals (95 %) resample clients, not rows, with the same draws for every metric.
-Precision, recall, F1 and ROC-AUC are not part of the core (see `threshold_metrics`).
+Precision, recall, F1 and ROC-AUC are not part of the core and not implemented here.
+
+Total-churn metrics (only when the universe of the test date is given, see `load_universe`). The core metrics
+above divide by the churned revenue of the regular clients (the perimeter); these three divide by the churned
+revenue of ALL clients of the snapshot (regular or not), so they say how much of the whole loss a list of K calls
+recovers. Segment "all", same K, same bootstrap (clients of the universe are resampled):
+
+    capture_total_at_k       V of the churners in the model's top K (ranked by `ev`, regular clients only)
+                             / V of all the churners of the universe.
+    oracle_total_capture     top K of ALL clients ranked by V x gone / same denominator.
+    size_only_total_capture  the K biggest clients of the whole universe (by V) / same denominator.
+
+They are not in `evaluation.metrics` (the config hash would change and every run would be rerun): they are
+computed whenever a universe is passed to `evaluate_predictions`.
+Impact scenarios and the tornado live in `impact.py`, not here.
 """
 
 from __future__ import annotations
@@ -30,22 +44,15 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score
 
-from churn.config import Config
+from churn.config import Config, resolve
 
 CORE_METRICS = ("capture_at_k", "size_only_capture", "oracle_capture", "pr_auc", "brier_raw", "brier_cal")
 _METRICS_AT_K = ("capture_at_k", "size_only_capture", "oracle_capture")
+# Computed when a universe is given, never listed in `evaluation.metrics` (see the module docstring).
+TOTAL_METRICS = ("capture_total_at_k", "oracle_total_capture", "size_only_total_capture")
+UNIVERSE_COLUMNS = ["client_id", "snapshot_date", "V", "gone", "rhythm", "rev_90d"]
 
 # ------------------------------------------------------------------------------ metrics
-
-
-def threshold_metrics(y: np.ndarray, p: np.ndarray, threshold: float) -> dict[str, float]:
-    """Precision, recall and F1 when predicting 'lost' for p >= threshold. Annex, not in the core."""
-    raise NotImplementedError("evaluation.threshold_metrics")
-
-
-def best_f1_threshold(y: np.ndarray, p: np.ndarray) -> float:
-    """Threshold maximising F1 (call it on validation data). Annex, not in the core."""
-    raise NotImplementedError("evaluation.best_f1_threshold")
 
 
 def pr_auc(y: np.ndarray, p: np.ndarray) -> float:
@@ -60,16 +67,20 @@ def brier(y: np.ndarray, p: np.ndarray) -> float:
     return float(np.mean((p - y) ** 2)) if len(y) else float("nan")
 
 
-def _capture(key: np.ndarray, lost: np.ndarray, date: np.ndarray, ks: Sequence[int]) -> np.ndarray:
+def _capture(
+    key: np.ndarray, lost: np.ndarray, date: np.ndarray, ks: Sequence[int], den: float | None = None
+) -> np.ndarray:
     """Captured share of `lost` in the top K of `key`, for every K at once, top K taken per snapshot date.
-    Ties keep the row order (rows are sorted by client_id), so the result is reproducible."""
-    num, den = np.zeros(len(ks)), 0.0
+    Ties keep the row order (rows are sorted by client_id), so the result is reproducible.
+    `den`: total to divide by; by default the total of `lost` over the rows."""
+    num, total = np.zeros(len(ks)), 0.0
     for d in np.unique(date):
         m = date == d
         cum = np.cumsum(lost[m][np.argsort(-key[m], kind="stable")])
         num += [cum[min(k, len(cum)) - 1] for k in ks]
-        den += cum[-1]
-    return num / den if den > 0 else np.full(len(ks), np.nan)
+        total += cum[-1]
+    total = total if den is None else den
+    return num / total if total > 0 else np.full(len(ks), np.nan)
 
 
 def capture_at_k(pred: pd.DataFrame, k: int, rank_by: str = "ev") -> float:
@@ -147,11 +158,106 @@ def _core(a: dict[str, np.ndarray], ks: Sequence[int], wanted: Sequence[str], pr
     return out
 
 
-def evaluate_predictions(pred: pd.DataFrame, cfg: Config) -> pd.DataFrame:
+# --------------------------------------------------------------------------- universe
+
+
+def load_universe(cfg: Config) -> pd.DataFrame:
+    """Every client of the snapshot of `cfg.snapshots.test_date`, read from the snapshot cache only.
+
+    Columns: client_id, snapshot_date, V, gone, rhythm, rev_90d. The perimeter (regular clients) is
+    `rhythm in snapshots.PERIMETER_RHYTHMS`. `gone` is NaN where the truth window is not fully observed.
+    The cache is never built here (no DuckDB): the file must already exist, because a run on the same
+    configuration wrote it.
+    """
+    from churn import snapshots  # imported here: `data` pulls DuckDB, which evaluation does not need
+    from churn.data import fingerprint
+
+    parquet = resolve(cfg.dataset.shifted_parquet)
+    if not parquet.exists():
+        raise FileNotFoundError(f"{parquet} not found: cannot compute the snapshot cache key of this configuration")
+    # `snapshots.PROCESSED_DIR` is read at call time: the tests redirect the cache folder there
+    folder = snapshots.PROCESSED_DIR / f"snapshots-{snapshots.cache_key(cfg, fingerprint(parquet))}"
+    path = folder / f"{cfg.snapshots.test_date}.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No cached snapshot for {cfg.snapshots.test_date} at {path}. load_universe only reads the cache "
+            "(it never builds snapshots): run an experiment with this configuration first."
+        )
+    return pd.read_parquet(path, columns=UNIVERSE_COLUMNS)
+
+
+def _universe_block(df: pd.DataFrame, universe: pd.DataFrame) -> dict[str, np.ndarray] | None:
+    """Arrays of the universe rows of the dates of `df` (the cleaned predictions of one split), with the model's
+    score `ev` on the clients that were predicted (-inf elsewhere) and `ranked`, which marks them.
+    None when the universe does not hold all the dates of the split."""
+    dates = pd.unique(df["snapshot_date"])
+    if not set(dates) <= set(pd.unique(universe["snapshot_date"])):
+        return None
+    uni = universe.loc[universe["snapshot_date"].isin(dates) & universe["gone"].notna()]
+    uni = uni.sort_values(["snapshot_date", "client_id"], kind="stable").reset_index(drop=True)
+    if uni.duplicated(["snapshot_date", "client_id"]).any() or df.duplicated(["snapshot_date", "client_id"]).any():
+        raise ValueError("Duplicate (snapshot_date, client_id) in the predictions or in the universe")
+    keys = ["snapshot_date", "client_id"]
+    joined = uni.merge(df[[*keys, "ev", "V", "gone"]], on=keys, how="left", suffixes=("", "_pred"), indicator=True)
+    if (df.merge(uni[keys], on=keys, how="left", indicator=True)["_merge"] != "both").any():
+        raise ValueError("Some predicted clients are not in the universe: wrong cache or wrong configuration")
+    seen = joined["_merge"] == "both"
+    if not np.allclose(joined.loc[seen, "V"], joined.loc[seen, "V_pred"], rtol=1e-9, equal_nan=True) or not (
+        joined.loc[seen, "gone"] == joined.loc[seen, "gone_pred"]
+    ).all():
+        raise ValueError("V or gone differ between the predictions and the universe: wrong cache or configuration")
+    ev = joined["ev"].to_numpy(dtype=float)
+    ranked = seen.to_numpy() & np.isfinite(ev)
+    return {
+        "V": joined["V"].to_numpy(dtype=float),
+        "gone": joined["gone"].to_numpy(dtype=float),
+        "ev": np.where(ranked, ev, -np.inf),
+        "ranked": ranked,
+        "client": joined["client_id"].to_numpy(),
+        "date": pd.factorize(joined["snapshot_date"])[0],
+    }
+
+
+def _total_core(a: dict[str, np.ndarray], ks: Sequence[int]) -> dict[tuple[str, int], float]:
+    """The three total-churn metrics of one set of universe rows: {(metric, k): value}.
+    One denominator (all the churned V of the universe, per date then pooled) for the three."""
+    lost = a["V"] * a["gone"]
+    den = sum(np.cumsum(np.sort(lost[a["date"] == d])[::-1])[-1] for d in np.unique(a["date"]))
+    out: dict[tuple[str, int], float] = {}
+    for name, key, num in (
+        ("capture_total_at_k", a["ev"], lost * a["ranked"]),
+        ("oracle_total_capture", lost, lost),
+        ("size_only_total_capture", a["V"], lost),
+    ):
+        out |= {(name, k): float(v) for k, v in zip(ks, _capture(key, num, a["date"], ks, den=den))}
+    return out
+
+
+def _total_rows(run_id: str, split: str, a: dict[str, np.ndarray], ks: Sequence[int], n_boot: int, seed: int) -> list:
+    """Rows of the long table for the total-churn metrics, with the bootstrap interval (clients of the universe
+    are resampled, so the clients that were never ranked count in the denominator's randomness too)."""
+    point = _total_core(a, ks)
+    draws: dict = {key: [] for key in point}
+    for idx in _resample_rows(a["client"], n_boot, seed):
+        for key, value in _total_core({c: v[idx] for c, v in a.items()}, ks).items():
+            draws[key].append(value)
+    rows = []
+    for (metric, k), value in point.items():
+        d = np.asarray(draws[(metric, k)], dtype=float)
+        low, high = np.nanpercentile(d, [2.5, 97.5]) if np.isfinite(d).any() else (np.nan, np.nan)
+        rows.append((run_id, split, "all", metric, k, value, low, high))
+    return rows
+
+
+def evaluate_predictions(pred: pd.DataFrame, cfg: Config, universe: pd.DataFrame | None = None) -> pd.DataFrame:
     """Long table (run_id, split, segment, metric, k, value, ci_low, ci_high) for one run.
 
     One block per split, with segment "all" (every core metric) and one segment per value of `segment`
     (probability metrics only). `k` is empty for metrics that do not depend on K.
+
+    `universe` (see `load_universe`): without it, nothing changes. With it, the three `TOTAL_METRICS` are added
+    (segment "all", one row per K) for every split whose snapshot dates are all in the universe; the other
+    splits are left as they are. The universe must cover at least one split.
     """
     wanted = tuple(cfg.evaluation.metrics)
     unknown = sorted(set(wanted) - set(CORE_METRICS))
@@ -159,9 +265,14 @@ def evaluate_predictions(pred: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         raise ValueError(f"Unknown or not implemented metric(s) {unknown}; available: {list(CORE_METRICS)}")
     if pred["run_id"].nunique() != 1:
         raise ValueError("evaluate_predictions takes the predictions of exactly one run")
+    if universe is not None:
+        missing = sorted({"client_id", "snapshot_date", "V", "gone"} - set(universe.columns))
+        if missing:
+            raise ValueError(f"The universe lacks the column(s) {missing}")
     ks, n_boot = list(cfg.evaluation.k_values), cfg.evaluation.bootstrap_n
 
     rows = []
+    covered = False
     for split, part in pred.groupby("split", sort=True):
         df = _clean(part)
         blocks = [("all", df)] + [(str(seg), g) for seg, g in df.groupby("segment", sort=True, observed=True)]
@@ -178,24 +289,14 @@ def evaluate_predictions(pred: pd.DataFrame, cfg: Config) -> pd.DataFrame:
                 d = np.asarray(draws[(metric, k)], dtype=float)
                 low, high = np.nanpercentile(d, [2.5, 97.5]) if np.isfinite(d).any() else (np.nan, np.nan)
                 rows.append((pred["run_id"].iloc[0], split, seg, metric, k, value, low, high))
+        if universe is not None and not df.empty:
+            u = _universe_block(df, universe)
+            if u is not None:
+                covered = True
+                rows += _total_rows(pred["run_id"].iloc[0], split, u, ks, n_boot, cfg.seed)
+    if universe is not None and not covered:
+        raise ValueError("The universe holds none of the snapshot dates of the predictions")
 
     out = pd.DataFrame(rows, columns=["run_id", "split", "segment", "metric", "k", "value", "ci_low", "ci_high"])
     out["k"] = out["k"].astype("Int64")
     return out
-
-
-# -------------------------------------------------------------------------------- impact
-# revenue x lost share x detection x retention x margin. Detection comes from the backtest,
-# the lost share is measured on the dataset, retention is a team hypothesis (scenarios) until the
-# pilot measures it. The net impact subtracts the opportunity cost of dedicated reps.
-
-
-def impact_scenarios(metrics: pd.DataFrame, cfg: Config) -> pd.DataFrame:
-    """Low / central / high scenarios (retention 10 / 20 / 30 %), in M EUR of gross margin per year."""
-    raise NotImplementedError("evaluation.impact_scenarios")
-
-
-def tornado_table(cfg: Config, ranges: dict[str, tuple[float, float]]) -> pd.DataFrame:
-    """One row per parameter (lost share, detection, retention): impact at its low and high
-    value, others at the central case, sorted by amplitude."""
-    raise NotImplementedError("evaluation.tornado_table")

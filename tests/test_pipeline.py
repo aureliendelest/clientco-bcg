@@ -234,6 +234,17 @@ def test_collect_writes_the_four_tables(two_runs):
     assert list(imp["run_id"].unique()) == [i for i in ids if "logreg" in i]  # the rule baseline has no importances
 
 
+def test_collect_adds_the_total_churn_metrics_only_when_asked(two_runs):
+    _, runs_dir, results_dir = two_runs
+    plain = pd.read_parquet(collect(runs_dir=runs_dir, results_dir=results_dir)["metrics"])
+    assert not plain["metric"].str.contains("_total_").any()
+
+    with_universe = pd.read_parquet(collect(runs_dir=runs_dir, results_dir=results_dir, universe_for=lambda cfg: True)["metrics"])
+    assert {"capture_total_at_k", "oracle_total_capture", "size_only_total_capture"} <= set(with_universe["metric"])
+    old = with_universe[~with_universe["metric"].str.contains("_total_")].reset_index(drop=True)
+    pd.testing.assert_frame_equal(old, plain)  # the existing metrics are untouched
+
+
 def test_collect_is_idempotent_and_leaves_no_temporary_file(two_runs):
     _, runs_dir, results_dir = two_runs
     first = {k: pd.read_parquet(p) for k, p in collect(runs_dir=runs_dir, results_dir=results_dir).items()}

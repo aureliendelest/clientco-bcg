@@ -11,3 +11,6 @@ rev_90d: "Chiffre d'affaires de {value} sur 90 jours"
 rev_180d: "Chiffre d'affaires de {value} sur 180 jours"
 gap_median: "Écart habituel entre deux achats : {value} jours"
 gap_p90: "Écart long entre deux achats : {value} jours"
+# The two "previous 90 days" variables have no direction of their own: the sentence states the two values, without a verdict.
+freq_prev_90d: "{value} jours d'achat entre 180 et 90 jours avant, {freq_90d} depuis"
+rev_prev_90d: "Chiffre d'affaires de {value} entre 180 et 90 jours avant, {rev_90d} depuis"

@@ -28,6 +28,7 @@ import pandas as pd
 import sklearn
 import xgboost
 import yaml
+from collections.abc import Callable
 from threadpoolctl import threadpool_limits
 
 from churn import models
@@ -36,9 +37,11 @@ from churn.config import (
 )
 from churn.config import run_id as make_run_id
 from churn.data import fingerprint
-from churn.evaluation import evaluate_predictions
+from churn.evaluation import evaluate_predictions, load_universe
 from churn.scoring import expected_value
-from churn.snapshots import FEATURE_SETS, client_group_folds, in_perimeter, load_or_build, temporal_split
+from churn.snapshots import (
+    FEATURE_SETS, SNAPSHOT_VERSION, cache_key, client_group_folds, in_perimeter, load_or_build, temporal_split,
+)
 
 FINAL_TEST_DATE = "2026-03-22"  # the test snapshot: run once, after the configuration is frozen
 FINAL_TEST_ENV = "CHURN_FINAL_TEST"
@@ -185,7 +188,7 @@ def run(cfg: Config, *, force: bool = False, runs_dir: Path | None = None) -> Pa
         fitted.importances.assign(run_id=rid).to_parquet(tmp / "importances.parquet", index=False)
         with (tmp / "model.pkl").open("wb") as f:
             pickle.dump({"model": fitted.model, "calibrator": fitted.calibrator, "features": fitted.features,
-                         "config": config_to_dict(cfg)}, f)
+                         "config": config_to_dict(cfg), "snapshot_version": SNAPSHOT_VERSION}, f)
         in_train, in_test = _perimeter(train), _perimeter(test)
         meta = {
             "run_id": rid, "name": cfg.name, "config_hash": config_hash(cfg), "seed": cfg.seed,
@@ -306,13 +309,31 @@ def _run_row(meta: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def collect(*, runs_dir: Path | None = None, results_dir: Path | None = None) -> dict[str, Path]:
+def _universe(cfg: Config, cache: dict) -> pd.DataFrame | None:
+    """The cached snapshot of the run's test date with every client (denominator of the `*_total_*` metrics), or
+    None with a warning when it is not in the cache. Runs that share a cache key and a date share one read."""
+    key = (cache_key(cfg, fingerprint(resolve(cfg.dataset.shifted_parquet))), cfg.snapshots.test_date)
+    if key not in cache:
+        try:
+            cache[key] = load_universe(cfg)
+        except FileNotFoundError as exc:
+            print(f"collect: no universe for {cfg.name} ({exc}); total-churn metrics skipped", flush=True)
+            cache[key] = None
+    return cache[key]
+
+
+def collect(
+    *, runs_dir: Path | None = None, results_dir: Path | None = None, universe_for: Callable[[Config], bool] | None = None
+) -> dict[str, Path]:
     """Scan `runs/`, recompute metrics from each run's predictions, write the four tables.
     Returns table name -> path.
 
     The tables are rebuilt from the run folders at every call (a deleted run disappears from them) and written
     atomically. Folders that are not complete runs (hidden temporary folders, a missing file) are skipped with a
-    warning. Metrics are always recomputed, never read back from an older table."""
+    warning. Metrics are always recomputed, never read back from an older table.
+
+    `universe_for(cfg)`: for the runs where it is true, the metrics with the whole client base as denominator
+    (`capture_total_at_k`, ...) are added; it costs 15 to 25 s per run, so it is off by default."""
     root = Path(runs_dir) if runs_dir is not None else RUNS_DIR
     out = Path(results_dir) if results_dir is not None else RESULTS_DIR
     needed = ("config.yaml", "meta.json", "predictions.parquet", "importances.parquet")
@@ -327,12 +348,14 @@ def collect(*, runs_dir: Path | None = None, results_dir: Path | None = None) ->
         raise ValueError(f"No complete run in {root}: run `churn run <config>` or `churn sweep <sweep>` first")
 
     runs, metrics, predictions, importances = [], [], [], []
+    universes: dict = {}
     for folder in folders:
         cfg = load_config(folder / "config.yaml")
         meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
         pred = pd.read_parquet(folder / "predictions.parquet")
         runs.append(_run_row(meta, config_to_dict(cfg)))
-        metrics.append(evaluate_predictions(pred, cfg))
+        uni = _universe(cfg, universes) if universe_for is not None and universe_for(cfg) else None
+        metrics.append(evaluate_predictions(pred, cfg, universe=uni))
         predictions.append(pred)
         importances.append(pd.read_parquet(folder / "importances.parquet"))
 
