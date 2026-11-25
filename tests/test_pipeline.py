@@ -1,8 +1,9 @@
-"""pipeline.run and sweeps: files written, schema, skip / force, reproducibility, no use of the test snapshot."""
+"""pipeline.run, sweeps and collect: files written, schema, skip / force, reproducibility, no use of the test snapshot."""
 
 import dataclasses
 import json
 import pickle
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ import pytest
 import yaml
 
 from churn.config import ModelCfg, config_hash, config_to_dict, load_config, override_config, run_id
-from churn.pipeline import PREDICTION_COLUMNS, expand_sweep, fit_predict, run, run_sweep
+from churn.pipeline import PREDICTION_COLUMNS, collect, expand_sweep, fit_predict, run, run_sweep
 from churn.snapshots import in_perimeter, load_or_build, temporal_split
 
 
@@ -170,3 +171,67 @@ def test_dates_in_a_grid_become_iso_strings(tmp_path, pipeline_cfg):
     base.write_text(yaml.safe_dump(config_to_dict(pipeline_cfg), sort_keys=False))
     sweep.write_text(f"base: {base}\ngrid:\n  snapshots.test_date: [2025-09-22, 2025-10-22]\n")
     assert [c.snapshots.test_date for c in expand_sweep(sweep)] == ["2025-09-22", "2025-10-22"]
+
+
+# ----------------------------------------------------------------------------------- collect
+
+
+@pytest.fixture()
+def two_runs(pipeline_cfg, tmp_path):
+    """Two runs (baseline, logreg) of the synthetic experiment, with a cheap bootstrap."""
+    base = dataclasses.replace(pipeline_cfg, evaluation=dataclasses.replace(pipeline_cfg.evaluation, bootstrap_n=10))
+    sweep = _write_sweep(tmp_path, base, {"model.type": ["baseline", "logreg"]}, name="two")
+    return run_sweep(sweep, runs_dir=tmp_path / "runs"), tmp_path / "runs", tmp_path / "results"
+
+
+def test_collect_writes_the_four_tables(two_runs):
+    folders, runs_dir, results_dir = two_runs
+    paths = collect(runs_dir=runs_dir, results_dir=results_dir)
+    assert {k: v.name for k, v in paths.items()} == {
+        "runs": "runs.parquet", "metrics": "metrics.parquet", "predictions": "predictions.parquet", "importances": "importances.parquet"}
+    ids = sorted(f.name for f in folders)
+
+    runs = pd.read_parquet(paths["runs"])
+    assert sorted(runs["run_id"]) == ids and runs["run_id"].is_unique
+    assert set(runs["model.type"]) == {"baseline", "logreg"}
+    assert {"git_sha", "data_fingerprint", "timings_s.total_s", "label.kind", "snapshots.test_date", "model.params"} <= set(runs.columns)
+    assert runs["name"].is_unique and "config.name" not in runs.columns
+
+    metrics = pd.read_parquet(paths["metrics"])
+    assert list(metrics.columns) == ["run_id", "split", "segment", "metric", "k", "value", "ci_low", "ci_high"]
+    assert sorted(metrics["run_id"].unique()) == ids
+    for rid in ids:
+        top = metrics[(metrics.run_id == rid) & (metrics.segment == "all") & (metrics.metric == "capture_at_k")]
+        assert len(top) == 3 and top["value"].between(0, 1).all()  # one row per K of evaluation.k_values
+
+    pred = pd.read_parquet(paths["predictions"])
+    assert len(pred) == sum(len(pd.read_parquet(f / "predictions.parquet")) for f in folders)
+    assert sorted(pred["run_id"].unique()) == ids
+    imp = pd.read_parquet(paths["importances"])
+    assert list(imp["run_id"].unique()) == [i for i in ids if "logreg" in i]  # the rule baseline has no importances
+
+
+def test_collect_is_idempotent_and_leaves_no_temporary_file(two_runs):
+    _, runs_dir, results_dir = two_runs
+    first = {k: pd.read_parquet(p) for k, p in collect(runs_dir=runs_dir, results_dir=results_dir).items()}
+    second = {k: pd.read_parquet(p) for k, p in collect(runs_dir=runs_dir, results_dir=results_dir).items()}
+    for name in first:
+        pd.testing.assert_frame_equal(first[name], second[name])
+    assert sorted(p.name for p in results_dir.iterdir()) == sorted(f"{n}.parquet" for n in first)
+
+
+def test_collect_follows_the_run_folders(two_runs, capsys):
+    folders, runs_dir, results_dir = two_runs
+    (runs_dir / ".half-written.tmp").mkdir()  # a run in progress
+    broken = runs_dir / "broken"
+    broken.mkdir()
+    (broken / "config.yaml").write_text("name: x\n")
+    shutil.rmtree(folders[0])  # a deleted run leaves the tables
+    paths = collect(runs_dir=runs_dir, results_dir=results_dir)
+    assert list(pd.read_parquet(paths["runs"])["run_id"]) == [folders[1].name]
+    assert "skipping broken" in capsys.readouterr().out
+
+
+def test_collect_without_any_run_is_an_error(tmp_path):
+    with pytest.raises(ValueError, match="No complete run"):
+        collect(runs_dir=tmp_path / "nothing", results_dir=tmp_path / "results")

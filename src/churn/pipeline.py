@@ -30,9 +30,10 @@ import yaml
 from threadpoolctl import threadpool_limits
 
 from churn import models
-from churn.config import ROOT, RUNS_DIR, Config, config_hash, config_to_dict, load_config, override_config, resolve
+from churn.config import RESULTS_DIR, ROOT, RUNS_DIR, Config, config_hash, config_to_dict, load_config, override_config, resolve
 from churn.config import run_id as make_run_id
 from churn.data import fingerprint
+from churn.evaluation import evaluate_predictions
 from churn.scoring import expected_value
 from churn.snapshots import FEATURE_SETS, client_group_folds, in_perimeter, load_or_build, temporal_split
 
@@ -257,7 +258,73 @@ def run_sweep(sweep_path: str | Path, *, force: bool = False, runs_dir: Path | N
 #     importances.parquet  feature importances                                                      [git-ignored]
 
 
-def collect() -> dict[str, Path]:
+def _flatten(prefix: str, value: Any, out: dict[str, Any]) -> None:
+    """Nested dict -> flat `a.b.c` columns; lists and free-form dicts become JSON strings (one Parquet column each)."""
+    if isinstance(value, dict) and prefix and prefix.split(".")[-1] not in ("params", "rhythm_bounds_days"):
+        for key, v in value.items():
+            _flatten(f"{prefix}.{key}", v, out)
+    elif isinstance(value, dict) and not prefix:
+        for key, v in value.items():
+            _flatten(key, v, out)
+    elif isinstance(value, (dict, list, tuple)):
+        out[prefix] = json.dumps(value, sort_keys=True, default=str)
+    else:
+        out[prefix] = value
+
+
+def _run_row(meta: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """One row of `runs.parquet`: the flattened configuration (`model.type`, `label.kind`, ...) and the run's metadata."""
+    row: dict[str, Any] = {"run_id": meta["run_id"]}
+    _flatten("", {k: v for k, v in meta.items() if k != "run_id"}, row)
+    for key, value in config.items():
+        if isinstance(value, dict):
+            _flatten(key, value, row)
+        else:
+            row.setdefault(key, value)  # `name` and `seed` are already there, from the metadata
+    return row
+
+
+def collect(*, runs_dir: Path | None = None, results_dir: Path | None = None) -> dict[str, Path]:
     """Scan `runs/`, recompute metrics from each run's predictions, write the four tables.
-    Returns table name -> path."""
-    raise NotImplementedError("pipeline.collect")
+    Returns table name -> path.
+
+    The tables are rebuilt from the run folders at every call (a deleted run disappears from them) and written
+    atomically. Folders that are not complete runs (hidden temporary folders, a missing file) are skipped with a
+    warning. Metrics are always recomputed, never read back from an older table."""
+    root = Path(runs_dir) if runs_dir is not None else RUNS_DIR
+    out = Path(results_dir) if results_dir is not None else RESULTS_DIR
+    needed = ("config.yaml", "meta.json", "predictions.parquet", "importances.parquet")
+    folders = []
+    for folder in sorted(p for p in root.glob("*") if p.is_dir() and not p.name.startswith(".")) if root.exists() else []:
+        missing = [f for f in needed if not (folder / f).exists()]
+        if missing:
+            print(f"collect: skipping {folder.name} (missing {', '.join(missing)})", flush=True)
+        else:
+            folders.append(folder)
+    if not folders:
+        raise ValueError(f"No complete run in {root}: run `churn run <config>` or `churn sweep <sweep>` first")
+
+    runs, metrics, predictions, importances = [], [], [], []
+    for folder in folders:
+        cfg = load_config(folder / "config.yaml")
+        meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+        pred = pd.read_parquet(folder / "predictions.parquet")
+        runs.append(_run_row(meta, config_to_dict(cfg)))
+        metrics.append(evaluate_predictions(pred, cfg))
+        predictions.append(pred)
+        importances.append(pd.read_parquet(folder / "importances.parquet"))
+
+    tables = {
+        "runs": pd.DataFrame(runs),
+        "metrics": pd.concat(metrics, ignore_index=True),
+        "predictions": pd.concat(predictions, ignore_index=True),
+        "importances": pd.concat(importances, ignore_index=True),
+    }
+    out.mkdir(parents=True, exist_ok=True)
+    paths = {}
+    for name, table in tables.items():
+        paths[name] = out / f"{name}.parquet"
+        tmp = paths[name].with_name(paths[name].name + ".tmp")
+        table.to_parquet(tmp, index=False)
+        tmp.replace(paths[name])  # atomic: the report notebook never reads a half-written table
+    return paths
