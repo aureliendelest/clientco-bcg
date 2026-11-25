@@ -1,0 +1,12 @@
+# The `extended` feature set (docs/plan_gel.md, contract C3) on the rolling backtest: HGB and XGB, labels A and B,
+# the six decision dates. The `basic` runs of the same grid already exist (backtest.yaml); the comparison is paired
+# by date (criterion of section 2 of the plan, written before any result). 24 runs.
+# `extended` = `basic` without freq_trend / rev_trend, plus mkt_freq_trend, mkt_rev_trend, negative_lines_share_180d,
+# product_div_trend, product_loss_share, channel_shift and branch_freq_trend (17 columns).
+# The test snapshot (2026-03-22) is NOT in the grid.
+base: configs/experiments/hgb.yaml
+grid:
+  model.type: [hgb, xgb]
+  label.kind: [fixed_horizon, relative_horizon]
+  snapshots.feature_set: [extended]
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]

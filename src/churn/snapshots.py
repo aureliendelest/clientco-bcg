@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from churn.config import PROCESSED_DIR, Config, LabelCfg, config_to_dict, resolve
-from churn.data import build_client_day_table, connect, fingerprint
+from churn.data import PURCHASE_DAY_MIN_NET, build_client_day_table, build_feature_tables, connect, fingerprint, has_feature_tables
 from churn.scoring import compute_value
 
 SNAPSHOT_VERSION = 2  # v2: freq_trend and rev_trend became log-ratios. Bump when the content of a snapshot changes for a given config: invalidates the cache
@@ -55,7 +55,9 @@ def build_snapshot(con: duckdb.DuckDBPyConnection, snapshot_date: date, cfg: Con
     their label and horizon, their value V and their segment.
 
     `con` must hold the tables of `data.build_client_day_table`."""
-    base = _aggregates(con, snapshot_date, cfg.snapshots.lookback_days, cfg.label.min_purchases)
+    base = _aggregates(
+        con, snapshot_date, cfg.snapshots.lookback_days, cfg.label.min_purchases, cfg.snapshots.feature_set
+    )
     base["rhythm"] = rhythm_class(base, cfg)
     base["V"] = compute_value(base, cfg)
     base = LABELS[cfg.label.kind](base, con, snapshot_date, cfg.label)
@@ -115,24 +117,40 @@ def load_or_build(cfg: Config, *, last: str | date | None = None) -> pd.DataFram
 
 # ---------------------------------------------------------------------------- features
 
+_BASIC_FEATURES = [
+    "recency_days",
+    "freq_180d",
+    "freq_90d",
+    "freq_prev_90d",
+    "rev_180d",
+    "rev_90d",
+    "rev_prev_90d",
+    "gap_median",
+    "gap_p90",
+    "recency_ratio",  # recency / gap_p90, only with enough purchase history
+    "freq_trend",  # log(1 + freq_90d) - log(1 + freq_prev_90d): 0 = stable, < 0 = decline
+    "rev_trend",  # same on revenue
+]
+# The market-adjusted trends REPLACE the raw ones (never both: together they would give the model the market
+# constant of the date, i.e. a date identifier, with only a handful of training dates).
+_MARKET_TRENDS = {"freq_trend": "mkt_freq_trend", "rev_trend": "mkt_rev_trend"}
+_NEW_FEATURES = [
+    "negative_lines_share_180d",  # |negative lines| / positive lines over the lookback
+    "product_div_trend",  # log1p(distinct products, last half) - log1p(distinct products, previous half)
+    "product_loss_share",  # share of the previous half revenue from products not bought again in the last half
+    "channel_shift",  # 1 - share of last half revenue in the dominant channel of the previous half
+    "branch_freq_trend",  # leave-one-out log-ratio of purchase days of the main branch
+]
+EXTENDED_FEATURES = [*_MARKET_TRENDS.values(), *_NEW_FEATURES]  # computed from the tables of `data.build_feature_tables`
+MIN_BRANCH_DAYS = 30  # branch_freq_trend is NaN when the branch has fewer purchase days (client excluded) in a window
+
 FEATURE_SETS: dict[str, list[str]] = {
-    "basic": [
-        "recency_days",
-        "freq_180d",
-        "freq_90d",
-        "freq_prev_90d",
-        "rev_180d",
-        "rev_90d",
-        "rev_prev_90d",
-        "gap_median",
-        "gap_p90",
-        "recency_ratio",  # recency / gap_p90, only with enough purchase history
-        "freq_trend",  # log(1 + freq_90d) - log(1 + freq_prev_90d): 0 = stable, < 0 = decline
-        "rev_trend",  # same on revenue
-    ],
-    # Planned extensions (not implemented): returns share, channel mix, number of branches,
-    # basket diversity, month indicator. Never a day-of-week feature (dates are shifted).
-    "extended": [],
+    "basic": _BASIC_FEATURES,
+    # Fallback of the freeze plan (section 2): `basic` with the two trends replaced by their market-adjusted version.
+    "market_only": [_MARKET_TRENDS.get(c, c) for c in _BASIC_FEATURES],
+    # 17 columns: `basic` without the two raw trends, plus the 7 variables of contract C3 of the freeze plan.
+    # Never a month or day-of-week feature (dates are shifted).
+    "extended": [c for c in _BASIC_FEATURES if c not in _MARKET_TRENDS] + EXTENDED_FEATURES,
 }
 _RHYTHM_FEATURES = ("gap_median", "gap_p90", "recency_ratio")  # NaN below `min_purchases` purchase days
 
@@ -140,15 +158,21 @@ _RHYTHM_FEATURES = ("gap_median", "gap_p90", "recency_ratio")  # NaN below `min_
 def _feature_columns(feature_set: str) -> list[str]:
     if feature_set not in FEATURE_SETS:
         raise ValueError(f"Unknown feature set {feature_set!r}; known: {sorted(FEATURE_SETS)}")
-    if not FEATURE_SETS[feature_set]:
-        raise NotImplementedError(f"feature set {feature_set!r} is not implemented yet")
     return FEATURE_SETS[feature_set]
 
 
-def _aggregates(con: duckdb.DuckDBPyConnection, snapshot_date: date, lookback_days: int, min_purchases: int) -> pd.DataFrame:
+def _aggregates(
+    con: duckdb.DuckDBPyConnection,
+    snapshot_date: date,
+    lookback_days: int,
+    min_purchases: int,
+    feature_set: str = "basic",
+) -> pd.DataFrame:
     """Every aggregate computed from the history before `snapshot_date`, one row per active client.
 
-    The columns are named for the default 180 / 90 day windows; the windows follow `lookback_days` (and its half)."""
+    The columns are named for the default 180 / 90 day windows; the windows follow `lookback_days` (and its half).
+    The columns of `EXTENDED_FEATURES` are only computed when `feature_set` needs them (`basic` never touches the
+    tables of `data.build_feature_tables`)."""
     t = f"{snapshot_date:%Y-%m-%d}"
     half = lookback_days // 2
     df = con.execute(f"""
@@ -173,7 +197,96 @@ def _aggregates(con: duckdb.DuckDBPyConnection, snapshot_date: date, lookback_da
     df["rev_trend"] = np.log1p(df["rev_90d"]) - np.log1p(df["rev_prev_90d"])
     too_short = df["freq_180d"] < min_purchases  # gaps are not reliable below `min_purchases` purchase days
     df.loc[too_short, list(_RHYTHM_FEATURES)] = np.nan
+    if set(_feature_columns(feature_set)) & set(EXTENDED_FEATURES):
+        df = _add_extended(df, con, snapshot_date, lookback_days)
     return df
+
+
+def _add_extended(df: pd.DataFrame, con: duckdb.DuckDBPyConnection, snapshot_date: date, lookback_days: int) -> pd.DataFrame:
+    """Add the columns of `EXTENDED_FEATURES` to the aggregates `df` (one row per active client).
+
+    Every query reads days in [T - lookback, T) only, so a line dated T or later never changes a value. The
+    "last half" is [T - half, T) and the "previous half" [T - lookback, T - half), as for `freq_90d` / `freq_prev_90d`.
+    Revenue of products and channels is the net revenue of the purchase days (`bn` days), floored at zero for each
+    product or channel over the window (a product returned in full has no revenue). A product or a channel is
+    "present" in a window when its net revenue there is above `PURCHASE_DAY_MIN_NET`."""
+    if not has_feature_tables(con):
+        build_feature_tables(con)
+    t = f"{snapshot_date:%Y-%m-%d}"
+    half = lookback_days // 2
+    lo, mid, hi = f"DATE '{t}' - {lookback_days}", f"DATE '{t}' - {half}", f"DATE '{t}'"
+    window = f"d >= {lo} AND d < {hi}"
+    m = PURCHASE_DAY_MIN_NET
+
+    # Global activity: log of the purchase days (resp. revenue) of ALL clients, last half minus previous half.
+    market = con.execute(f"""
+        SELECT coalesce(sum(n_days) FILTER (WHERE d >= {mid}), 0), coalesce(sum(n_days) FILTER (WHERE d < {mid}), 0),
+               coalesce(sum(rev) FILTER (WHERE d >= {mid}), 0), coalesce(sum(rev) FILTER (WHERE d < {mid}), 0)
+        FROM act_day WHERE {window}""").fetchone()
+
+    def log_ratio(recent: float, previous: float) -> float:
+        return float(np.log(recent) - np.log(previous)) if recent > 0 and previous > 0 else np.nan
+
+    mkt_freq, mkt_rev = log_ratio(market[0], market[1]), log_ratio(market[2], market[3])
+
+    negative = con.execute(f"""
+        SELECT client_id, coalesce(-sum(neg), 0) / nullif(sum(pos), 0) AS negative_lines_share_180d
+        FROM cd_lines WHERE {window} GROUP BY client_id""").fetchdf()
+
+    products = con.execute(f"""
+        SELECT client_id,
+               count(*) FILTER (WHERE rec > {m}) AS n_prod_rec,
+               count(*) FILTER (WHERE prv > {m}) AS n_prod_prev,
+               sum(prv) FILTER (WHERE prv > {m}) AS prev_rev,
+               sum(prv) FILTER (WHERE prv > {m} AND NOT rec > {m}) AS lost_rev
+        FROM (SELECT client_id, product_id,
+                     coalesce(sum(rev) FILTER (WHERE d >= {mid}), 0) AS rec,
+                     coalesce(sum(rev) FILTER (WHERE d < {mid}), 0) AS prv
+              FROM cpd WHERE {window} GROUP BY client_id, product_id)
+        GROUP BY client_id""").fetchdf()
+
+    channels = con.execute(f"""
+        WITH w AS (
+            SELECT client_id, channel,
+                   greatest(coalesce(sum(rev) FILTER (WHERE d >= {mid}), 0), 0) AS rec,
+                   greatest(coalesce(sum(rev) FILTER (WHERE d < {mid}), 0), 0) AS prv
+            FROM ccd WHERE {window} GROUP BY client_id, channel),
+        t AS (
+            SELECT client_id, rec, sum(rec) OVER (PARTITION BY client_id) AS tot_rec,
+                   sum(prv) OVER (PARTITION BY client_id) AS tot_prv
+            FROM w QUALIFY row_number() OVER (PARTITION BY client_id ORDER BY prv DESC, channel) = 1)
+        SELECT client_id, CASE WHEN tot_prv > 0 AND tot_rec > 0 THEN 1 - rec / tot_rec END AS channel_shift FROM t""").fetchdf()
+
+    # Main branch = branch with the largest revenue over the lookback (ties: lowest id). Its purchase days in each
+    # half, over ALL clients, minus the ones of the client himself (leave-one-out).
+    branches = con.execute(f"""
+        WITH own AS (
+            SELECT client_id, branch_id, sum(rev) AS rev,
+                   count(*) FILTER (WHERE d >= {mid})::BIGINT AS n_rec, count(*) FILTER (WHERE d < {mid})::BIGINT AS n_prev
+            FROM cbd WHERE {window} GROUP BY client_id, branch_id),
+        tot AS (SELECT branch_id, sum(n_rec)::BIGINT AS t_rec, sum(n_prev)::BIGINT AS t_prev FROM own GROUP BY branch_id)
+        SELECT o.client_id, t.t_rec - o.n_rec AS b_rec, t.t_prev - o.n_prev AS b_prev
+        FROM own o JOIN tot t USING (branch_id)
+        QUALIFY row_number() OVER (PARTITION BY o.client_id ORDER BY o.rev DESC, o.branch_id) = 1""").fetchdf()
+
+    out = df.merge(negative, on="client_id", how="left")
+
+    prod = df[["client_id"]].merge(products, on="client_id", how="left")
+    out["product_div_trend"] = np.log1p(prod["n_prod_rec"].fillna(0).to_numpy()) - np.log1p(prod["n_prod_prev"].fillna(0).to_numpy())
+    both = ((df["freq_90d"] > 0) & (df["freq_prev_90d"] > 0)).to_numpy() & (prod["prev_rev"].fillna(0) > 0).to_numpy()
+    out["product_loss_share"] = np.where(both, prod["lost_rev"].fillna(0) / prod["prev_rev"].where(prod["prev_rev"] > 0), np.nan)
+
+    out = out.merge(channels, on="client_id", how="left")
+
+    br = df[["client_id"]].merge(branches, on="client_id", how="left")
+    enough = (br["b_rec"] >= MIN_BRANCH_DAYS) & (br["b_prev"] >= MIN_BRANCH_DAYS)
+    out["branch_freq_trend"] = np.where(
+        enough, np.log(br["b_rec"].where(enough)) - np.log(br["b_prev"].where(enough)), np.nan
+    )
+
+    out["mkt_freq_trend"] = out["freq_trend"] - mkt_freq
+    out["mkt_rev_trend"] = out["rev_trend"] - mkt_rev
+    return out
 
 
 def compute_features(
@@ -187,7 +300,7 @@ def compute_features(
     """One row per client active before `snapshot_date`, with the columns of `FEATURE_SETS[feature_set]`.
     Rhythm features (gap_*, recency_ratio) are NaN below `label.min_purchases` purchases."""
     columns = _feature_columns(feature_set)
-    return _aggregates(con, snapshot_date, lookback_days, min_purchases)[["client_id", *columns]]
+    return _aggregates(con, snapshot_date, lookback_days, min_purchases, feature_set)[["client_id", *columns]]
 
 
 # -------------------------------------------------------------------------------- labels

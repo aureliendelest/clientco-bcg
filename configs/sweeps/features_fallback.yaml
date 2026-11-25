@@ -1,0 +1,10 @@
+# The single fallback of the freeze plan (section 2): run ONLY if `features.yaml` fails the acceptance criterion.
+# `market_only` = `basic` with freq_trend and rev_trend replaced by mkt_freq_trend and mkt_rev_trend (12 columns).
+# Same grid as `features.yaml`, same paired comparison against the existing `basic` runs; no other rescue.
+# The test snapshot (2026-03-22) is NOT in the grid.
+base: configs/experiments/hgb.yaml
+grid:
+  model.type: [hgb, xgb]
+  label.kind: [fixed_horizon, relative_horizon]
+  snapshots.feature_set: [market_only]
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]

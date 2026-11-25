@@ -11,8 +11,17 @@ import pandas as pd
 import pytest
 
 from churn.config import Config
-from churn.snapshots import assert_labels_known_before_test, build_snapshot, compute_features, load_or_build, temporal_split
+from churn.snapshots import (
+    EXTENDED_FEATURES,
+    FEATURE_SETS,
+    assert_labels_known_before_test,
+    build_snapshot,
+    compute_features,
+    load_or_build,
+    temporal_split,
+)
 from tests.helpers import T, before, every, sales_for
+from tests.helpers_features import features, line, lines, rich_rows
 
 
 def test_features_on_truncated_data_are_identical(sales_con):
@@ -120,3 +129,46 @@ def test_calibration_is_fitted_without_test_data(pipeline_cfg):
         base[["client_id", "p_raw", "p_cal"]].reset_index(drop=True),
         other.loc[other["split"] == "test", ["client_id", "p_raw", "p_cal"]].reset_index(drop=True),
     )
+
+
+def _future_lines(scale: float) -> list[tuple]:
+    """Lines dated T and later, wild on purpose: new products, channels and branches, returns, new clients, and
+    amounts or places that change with `scale`."""
+    rows = []
+    for client in (1, 2, 3, 4, 50):  # 50 only exists from T on
+        for offset in (0, -1, -10, -60):
+            rows.append(line(client, offset, 1000.0 * scale, product=900 + int(scale), channel="other", branch=int(scale) + 20))
+            rows.append(line(client, offset, -400.0 * scale, product=7, channel="by phone", branch=7))
+    rows += lines(51, range(0, -40, -1), 10.0 * scale, branch=7)  # a crowd at the main branch of the others, from T on
+    return rows
+
+
+@pytest.mark.parametrize("feature_set", sorted(FEATURE_SETS))
+def test_every_feature_ignores_lines_dated_from_T(feature_set):
+    # Rule 1 for all the feature sets: the features of T computed on the history only equal the ones computed when
+    # lines dated T or later are added, whatever those lines are (amounts, products, channels, branches, returns,
+    # new clients). Two different futures give the same table.
+    history = rich_rows()
+    base = features(history, feature_set)
+    for scale in (1.0, 5.0):
+        pd.testing.assert_frame_equal(base, features(history + _future_lines(scale), feature_set))
+    assert 50 not in base.index and 51 not in base.index
+    assert list(base.columns) == FEATURE_SETS[feature_set]
+
+
+def test_the_new_features_react_to_the_history_before_T():
+    # The invariance test above would pass on constant features: every new variable must change when the history
+    # changes (extra lines the day before T, a return, a new product and channel, a new client at the main branch).
+    history = rich_rows()
+    changed = history + [
+        line(1, 2, 900.0, product=999, channel="at the store", branch=8),
+        line(1, 3, -300.0, product=998, channel="by phone", branch=7),
+        line(1, 4, 50.0, product=996),
+        line(1, 120, 300.0, product=997),  # a product of the previous half that is never bought again
+        *lines(5, range(1, 60), 10.0, branch=7),
+    ]
+    a, b = features(history), features(changed)
+    assert a.loc[[1, 2], "branch_freq_trend"].notna().all()  # the test is not vacuous: the minimum of 30 days is met
+    for col in EXTENDED_FEATURES:
+        both_nan = a[col].isna() & b.reindex(a.index)[col].isna()
+        assert not np.allclose(a[col][~both_nan], b.reindex(a.index)[col][~both_nan], equal_nan=True), col

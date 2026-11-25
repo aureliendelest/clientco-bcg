@@ -1,0 +1,10 @@
+# Reference for the comparison of the feature sets (docs/plan_gel.md, section 2): the `basic` feature set rerun with the
+# CURRENT code. The runs of backtest.yaml predate the switch of freq_trend and rev_trend to log-ratios (commit af62a5f),
+# so they cannot be the baseline of a paired comparison with `extended`. Same grid as features.yaml, with `basic`.
+# The test snapshot (2026-03-22) is NOT in the grid.
+base: configs/experiments/hgb.yaml
+grid:
+  model.type: [hgb, xgb]
+  label.kind: [fixed_horizon, relative_horizon]
+  snapshots.feature_set: [basic]
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]
