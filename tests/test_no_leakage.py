@@ -87,7 +87,7 @@ def test_rhythm_features_use_only_prior_purchases_and_need_min_purchases(sales_c
     pd.testing.assert_series_equal(feats.loc[ids["on_day_T"]], feats.loc[ids["six"]], check_names=False)
 
 
-@pytest.mark.skip(reason="stub: calibration not implemented")
+@pytest.mark.skip(reason="stub: needs pipeline.run (the calibrator itself only sees the data it is given)")
 def test_calibration_is_fitted_without_test_data():
     # Rule 5: fit_calibrator never sees the test snapshot.
     ...
