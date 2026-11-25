@@ -1,0 +1,15 @@
+# FROZEN configuration of the final test (docs/plan_gel.md): feature set basic, label A, XGBoost with the hyperparameters
+# of ONE Optuna study (50 trials, 5-fold CV grouped by client) on the 7 training snapshots of the test, 2025-03-22 to
+# 2025-09-22. The test snapshot was never read by the study. Do not edit after the freeze.
+extends: configs/base.yaml
+name: final
+model:
+  type: xgb
+  params:
+    learning_rate: 0.0213407965543278
+    n_estimators: 458
+    max_depth: 4
+    min_child_weight: 13.378621173177121
+    reg_lambda: 3.836748126184722
+    subsample: 0.7722197602998829
+    colsample_bytree: 0.7515556314636135

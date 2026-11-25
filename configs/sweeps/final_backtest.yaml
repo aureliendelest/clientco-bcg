@@ -1,0 +1,6 @@
+# Rolling backtest of the frozen configuration (configs/experiments/final.yaml), to measure what Optuna brings over the
+# default XGBoost (basic_v2). Reserve: the study saw training data more recent than the first dates of this backtest, so the
+# gain is optimistic; it is a measure of the tuning, not a performance figure. The test snapshot (2026-03-22) is NOT in the grid.
+base: configs/experiments/final.yaml
+grid:
+  snapshots.test_date: [2025-09-22, 2025-10-22, 2025-11-22, 2025-12-22, 2026-01-22, 2026-02-22]
