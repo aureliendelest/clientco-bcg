@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Listes churn ClientCo</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(42,120,214,.09);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(57,135,229,.16);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+p.sub { margin: 0; color: var(--ink-2); }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+.params { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; }
+.params + .params { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--grid); }
+.group { width: 100%; color: var(--muted); font-size: 12px; margin-bottom: -6px; }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); }
+label.inline { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
+select, input[type=number], input[type=search], button {
+  font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px;
+}
+input[type=number] { width: 96px; }
+button { cursor: pointer; }
+.kline { display: flex; gap: 8px; align-items: center; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 14px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+.tile .name { color: var(--ink-2); font-size: 12px; }
+.tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+.tile .note { color: var(--muted); font-size: 12px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; margin-bottom: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+.scroll { overflow: auto; border: 1px solid var(--grid); border-radius: 6px; }
+.scroll.tall { max-height: 560px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-size: 12px; font-weight: 600; z-index: 1; }
+th[data-sort] { cursor: pointer; }
+td.l, th.l { text-align: left; }
+tr.pick { cursor: pointer; }
+tr.pick:hover, tr.sel { background: var(--wash); }
+tr.detail td { text-align: left; white-space: normal; background: var(--page); color: var(--ink-2); }
+tfoot td { font-weight: 600; }
+td input[type=number] { width: 76px; padding: 2px 6px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
+.warn { color: var(--ink); border-left: 3px solid var(--s2); padding-left: 8px; margin: 8px 0 0; }
+#tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 6px 10px; font-size: 12px; display: none; z-index: 5; }
+svg text { fill: var(--muted); font-size: 11px; }
+ul.notes { margin: 0; padding-left: 18px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Prévention du churn : listes d'appels</h1>
+  <p class="sub">Rejeu historique sur le backtest, périmètre des clients réguliers du dataset. Données clients confidentielles : ne pas diffuser.</p>
+  <p id="loading">Chargement des données…</p>
+
+  <div id="app" hidden>
+    <section>
+      <div class="params">
+        <div class="group">Paramètres qui changent les listes</div>
+        <label>Cadence
+          <select id="cadence">
+            <option value="1">Toutes les semaines</option>
+            <option value="2" selected>Par quinzaine</option>
+            <option value="4">Toutes les 4 semaines</option>
+          </select>
+        </label>
+        <label>Appels par liste (K)
+          <span class="kline"><input id="kRange" type="range" min="20" step="10"><input id="kNum" type="number" min="0" step="10"></span>
+        </label>
+        <label>Repos avant rappel
+          <select id="rest">
+            <option value="0">Aucun</option><option value="30">30 jours</option><option value="60">60 jours</option>
+            <option value="90" selected>90 jours</option><option value="180">180 jours</option>
+          </select>
+        </label>
+        <label>Classement
+          <select id="ranking">
+            <option value="ev">Probabilité × CA 180 j × 2 (référence)</option>
+            <option value="evr">Probabilité × CA 90 j × 4 (CA récent)</option>
+          </select>
+        </label>
+        <button id="reset">Réinitialiser</button>
+      </div>
+      <div class="params">
+        <div class="group">Paramètres qui ne changent que les euros</div>
+        <label>Rétention (% des partants captés sauvés)<input id="retention" type="number" min="0" max="100" step="1"></label>
+        <label>Marge brute (%)<input id="margin" type="number" min="0" max="100" step="0.05"></label>
+        <label>Coût par appel (€)<input id="cost" type="number" min="0" step="5" value="0"></label>
+        <label class="inline"><input id="scaleOn" type="checkbox"> Extrapoler à l'entreprise ×
+          <input id="scale" type="number" min="1" step="0.1" value="3.3"> (non validé)</label>
+      </div>
+      <p id="warn" class="warn" hidden></p>
+    </section>
+
+    <div class="tiles" id="tiles"></div>
+
+    <section>
+      <h2>CA des partants capté par mois</h2>
+      <div class="legend">
+        <span><i style="background:var(--s1)"></i>Modèle</span>
+        <span><i style="background:var(--s2)"></i>Plus gros clients (sans modèle)</span>
+        <span><i style="background:var(--s3)"></i>Oracle (plafond indicatif)</span>
+      </div>
+      <div id="chart"></div>
+      <div class="scroll"><table id="months"></table></div>
+    </section>
+
+    <section>
+      <h2>Les listes de la période</h2>
+      <p class="sub" style="margin-bottom:10px">Modifiez K sur une ligne : cette liste et les suivantes sont recalculées avec le repos. Cliquez sur une ligne pour voir ses clients.</p>
+      <div class="scroll tall"><table id="lists"></table></div>
+    </section>
+
+    <section>
+      <h2 id="rankTitle">Classement des clients</h2>
+      <div class="toolbar">
+        <label>Liste du<select id="pick"></select></label>
+        <label>Chercher un client<input id="search" type="search" placeholder="Identifiant"></label>
+        <label class="inline"><input id="truth" type="checkbox"> Afficher ce qui s'est réellement passé</label>
+      </div>
+      <div class="scroll tall"><table id="ranktable"></table></div>
+    </section>
+
+    <section>
+      <h2>Comment lire ces chiffres</h2>
+      <ul class="notes">
+        <li><b>CA capté</b> : CA annualisé (CA des 180 jours × 2) des clients qui sont réellement partis (aucun achat pendant 180 jours) et qui figuraient dans une liste. Ce n'est pas du CA sauvé.</li>
+        <li>Chaque partant est compté une seule fois, à la première liste qui le capte, avec la même valeur quelle que soit la cadence.</li>
+        <li><b>Marge</b> = rétention × marge brute × CA capté − coût × appels. La rétention est une hypothèse que seul un pilote mesurera.</li>
+        <li>Ce cumul sur toute la période ne se compare pas au CA capté ni à la marge d'une seule liste de 700 clients du backtest.</li>
+        <li>Le rejeu suppose que les appels ne changent pas le comportement des clients, donc pas les listes suivantes.</li>
+        <li>Le résultat réel n'est connu que 180 jours après la liste : en production, la liste du jour n'a pas de CA capté.</li>
+        <li>Une seule période, avec les modèles mensuels du backtest. La date du test final n'est pas utilisée.</li>
+      </ul>
+    </section>
+  </div>
+  <div id="tip"></div>
+</main>
+
+<script id="blob" type="text/plain">__DATA__</script>
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+const $ = (id) => document.getElementById(id);
+const nf = (x, d = 0) => x.toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const eur = (x) => nf(Math.round(x)) + " €";
+const money = (x) => (Math.abs(x) >= 1e6 ? nf(x / 1e6, 1) + " M€" : Math.abs(x) >= 1e3 ? nf(x / 1e3) + " k€" : nf(x) + " €");
+const pct = (x, d = 1) => (Number.isFinite(x) ? nf(100 * x, d) + " %" : "–");
+const frDate = (iso) => iso.split("-").reverse().join("/");
+const monthName = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("fr-FR", { month: "short", year: "numeric", timeZone: "UTC" });
+const SEG = { fast: "Rapide", medium: "Moyen" };
+
+let data, sim, ks, selected = 0, openRow = null, sortKey = "rank", sortDir = 1;
+
+async function load() {
+  const bytes = Uint8Array.from(atob($("blob").textContent.trim()), (c) => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  data = JSON.parse(await new Response(stream).text());
+  $("loading").hidden = true;
+  $("app").hidden = false;
+  reset();
+}
+
+function reset() {
+  $("cadence").value = "2"; $("rest").value = "90"; $("ranking").value = "ev";
+  $("retention").value = Math.round(100 * data.defaults.retention[1]);
+  $("margin").value = +(100 * data.defaults.gross_margin).toFixed(2);
+  $("cost").value = 0; $("scaleOn").checked = false; $("scale").value = 3.3;
+  resetK(data.defaults.k_per_week * 2);
+}
+
+const kMax = () => 600 * +$("cadence").value;
+const clampK = (x) => Math.min(kMax(), Math.max(0, Math.round(+x || 0)));
+
+// Same K for every list (also drops the per-list changes).
+function resetK(k) {
+  $("kRange").max = $("kNum").max = kMax();
+  const n = listDates(data, +$("cadence").value).length;
+  ks = Array(n).fill(k);
+  $("kRange").value = k; $("kNum").value = k;
+  selected = Math.min(selected, n - 1);
+  openRow = null;
+  recompute();
+}
+
+function recompute() {
+  sim = simulate(data, { cadenceWeeks: +$("cadence").value, ks, restDays: +$("rest").value, ranking: $("ranking").value });
+  const short = [["model", "le modèle"], ["size", "les plus gros clients"]]
+    .map(([p, name]) => [sim[p].filter((l) => l.short).length, name]).filter(([n]) => n);
+  $("warn").hidden = !short.length;
+  $("warn").textContent = short.length
+    ? "Listes incomplètes (" + short.map(([n, name]) => `${n} pour ${name}`).join(", ") +
+      ") : plus assez de clients disponibles dans les candidats embarqués. Réduisez K ou le repos, sinon la comparaison est faussée." : "";
+  $("pick").innerHTML = sim.model.map((l, n) => `<option value="${n}">${frDate(l.date.date)} (${nf(l.rows.length)} clients)</option>`).join("");
+  $("pick").value = selected;
+  renderEuros(); renderLists(); renderRanking();
+}
+
+function euroParams() {
+  const num = (id) => Math.max(0, +$(id).value || 0);
+  return { r: num("retention") / 100, m: num("margin") / 100, cost: num("cost"), f: $("scaleOn").checked ? num("scale") : 1 };
+}
+const marginOf = (capturedV, calls) => { const e = euroParams(); return e.f * (e.r * e.m * capturedV - e.cost * calls); };
+
+function byMonth() {
+  const months = new Map();
+  sim.model.forEach((l, n) => {
+    const key = l.date.date.slice(0, 7);
+    if (!months.has(key)) months.set(key, { label: monthName(l.date.date), lists: 0, calls: 0, churners: 0, model: 0, size: 0, oracle: 0 });
+    const m = months.get(key);
+    m.lists++; m.calls += l.rows.length; m.churners += l.newChurners;
+    for (const p of ["model", "size", "oracle"]) m[p] += sim[p][n].newV;
+  });
+  return [...months.values()];
+}
+
+function renderEuros() {
+  const t = totals(sim.model), s = totals(sim.size), o = totals(sim.oracle), e = euroParams();
+  const first = sim.model[0].date.date, last = sim.model[sim.model.length - 1].date.date;
+  const end = new Date(Date.parse(last + "T00:00:00Z") + (7 * +$("cadence").value - 1) * 86400000).toISOString().slice(0, 10);
+  const scope = e.f === 1 ? "dataset (≈ 30 % du CA)" : `entreprise, extrapolation × ${nf(e.f, 1)} non validée`;
+  const tile = (name, value, note) => `<div class="tile"><div class="name">${name}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
+  $("tiles").innerHTML =
+    tile("CA annuel des partants capté", money(e.f * t.capturedV), `${frDate(first)} → ${frDate(end)} · ${scope}`) +
+    tile("Part du CA des partants", pct(t.capturedV / data.total_loss),
+         `plus gros clients ${pct(s.capturedV / data.total_loss)} · oracle ${pct(o.capturedV / data.total_loss)}`) +
+    tile(e.cost > 0 ? "Marge nette sauvée" : "Marge brute sauvée", money(marginOf(t.capturedV, t.calls)),
+         `rétention ${nf(100 * e.r)} % · marge ${nf(100 * e.m, 2)} % · ${e.cost > 0 ? "coût d'appel déduit" : "coût d'appel non déduit"}`) +
+    tile("Appels", nf(e.f * t.calls), `${sim.model.length} listes · ${nf(e.f * t.distinct)} clients distincts · ${nf(e.f * t.churners)} partants captés`);
+
+  const months = byMonth();
+  renderChart(months, e.f);
+  $("months").innerHTML =
+    `<thead><tr><th class="l">Mois</th><th>Listes</th><th>Appels</th><th>Partants captés</th><th>CA capté, modèle</th>
+     <th>Plus gros clients</th><th>Oracle</th><th>Marge sauvée</th></tr></thead><tbody>` +
+    months.map((m) => `<tr><td class="l">${m.label}</td><td>${m.lists}</td><td>${nf(e.f * m.calls)}</td><td>${nf(e.f * m.churners)}</td>
+      <td>${money(e.f * m.model)}</td><td>${money(e.f * m.size)}</td><td>${money(e.f * m.oracle)}</td><td>${money(marginOf(m.model, m.calls))}</td></tr>`).join("") +
+    `</tbody><tfoot><tr><td class="l">Période</td><td>${sim.model.length}</td><td>${nf(e.f * t.calls)}</td><td>${nf(e.f * t.churners)}</td>
+     <td>${money(e.f * t.capturedV)}</td><td>${money(e.f * s.capturedV)}</td><td>${money(e.f * o.capturedV)}</td><td>${money(marginOf(t.capturedV, t.calls))}</td></tr></tfoot>`;
+}
+
+function niceStep(max) {
+  const raw = max / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  return [1, 2, 5, 10].map((k) => k * p).find((s) => s >= raw);
+}
+
+function renderChart(months, f) {
+  const W = Math.max($("chart").clientWidth, 320), H = 240, L = 56, B = 22, T = 8;
+  const max = Math.max(1, ...months.flatMap((m) => [m.model, m.size, m.oracle])) * f;
+  const step = niceStep(max), top = Math.ceil(max / step) * step;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  let svg = `<svg width="${W}" height="${H}" role="img" aria-label="CA des partants capté par mois">`;
+  for (let v = 0; v <= top + step / 2; v += step)
+    svg += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(${v ? "--grid" : "--axis"})"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${money(v)}</text>`;
+  const band = (W - L) / months.length, bw = Math.min(24, (band - 16) / 3);
+  months.forEach((m, i) => {
+    const x0 = L + band * i + (band - 3 * bw - 4) / 2;
+    ["model", "size", "oracle"].forEach((p, j) => {
+      const v = m[p] * f, x = x0 + j * (bw + 2), h = y(0) - y(v), r = Math.min(4, h, bw / 2);
+      svg += `<path d="M${x},${y(0)}v${-(h - r)}q0,${-r} ${r},${-r}h${bw - 2 * r}q${r},0 ${r},${r}v${h - r}z" fill="var(--s${j + 1})"/>`;
+    });
+    svg += `<text x="${L + band * (i + .5)}" y="${H - 6}" text-anchor="middle">${m.label}</text>`;
+    svg += `<rect data-i="${i}" x="${L + band * i}" y="${T}" width="${band}" height="${H - T - B}" fill="transparent"/>`;
+  });
+  $("chart").innerHTML = svg + "</svg>";
+  $("chart").querySelectorAll("rect[data-i]").forEach((rect) => {
+    rect.onmousemove = (ev) => {
+      const m = months[+rect.dataset.i], tip = $("tip");
+      tip.innerHTML = `<b>${m.label}</b> (${m.lists} liste${m.lists > 1 ? "s" : ""})<br>Modèle : ${money(f * m.model)}<br>Plus gros clients : ${money(f * m.size)}<br>Oracle : ${money(f * m.oracle)}`;
+      tip.style.display = "block";
+      tip.style.left = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+      tip.style.top = ev.clientY + 14 + "px";
+    };
+    rect.onmouseleave = () => ($("tip").style.display = "none");
+  });
+}
+
+function renderLists() {
+  let cum = 0;
+  $("lists").innerHTML =
+    `<thead><tr><th class="l">Liste du</th><th>K</th><th>Clients</th><th>Déjà appelés avant</th><th>Partants dans la liste</th>
+     <th title="CA des partants de la liste / CA de tous les partants à cette date">Part captée à cette date</th>
+     <th>Nouveau CA capté</th><th title="Partants comptés une fois / tous les partants de la période">Cumul de la période</th></tr></thead><tbody>` +
+    sim.model.map((l, n) => {
+      cum += l.newV;
+      return `<tr class="pick${n === selected ? " sel" : ""}" data-n="${n}"><td class="l">${frDate(l.date.date)}</td>
+        <td><input type="number" min="0" max="${kMax()}" step="10" value="${l.k}" data-k="${n}" aria-label="K de la liste du ${frDate(l.date.date)}"></td>
+        <td>${nf(l.rows.length)}</td><td>${nf(l.calledBefore)}</td><td>${nf(l.churners)}</td>
+        <td>${pct(l.listV / l.date.churned_v)}</td><td>${money(l.newV)}</td><td>${pct(cum / data.total_loss)}</td></tr>`;
+    }).join("") + "</tbody>";
+}
+
+const COLUMNS = [
+  ["rank", "Rang"], ["id", "Client"], ["seg", "Rythme"], ["rev180", "CA 180 j"], ["rev90", "CA 90 j"],
+  ["revprev", "CA 90 j d'avant"], ["trend", "Évolution"], ["v", "CA annualisé"], ["p", "Risque de départ"],
+  ["score", "Valeur à risque"], ["recency", "Dernier achat"],
+];
+
+function renderRanking() {
+  const l = sim.model[selected], d = l.date, truth = $("truth").checked, query = $("search").value.trim();
+  $("rankTitle").textContent = `Classement des clients : liste du ${frDate(d.date)}`;
+  let rows = l.rows.map((i, n) => ({
+    i, rank: n + 1, id: d.id[i], seg: d.seg[i], rev180: d.rev180[i], rev90: d.rev90[i], revprev: d.revprev[i],
+    trend: d.revprev[i] > 0 ? d.rev90[i] / d.revprev[i] - 1 : null, v: d.v[i], p: d.p[i],
+    score: d[$("ranking").value][i], recency: d.recency[i], before: l.before[n],
+  }));
+  if (query) rows = rows.filter((r) => String(r.id).includes(query));
+  rows.sort((a, b) => sortDir * (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : a.rank - b.rank));
+  const span = COLUMNS.length + (truth ? 1 : 0);
+  $("ranktable").innerHTML =
+    "<thead><tr>" + COLUMNS.map(([k, name]) => `<th data-sort="${k}">${name}${k === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") +
+    (truth ? "<th>Réalité (180 j)</th>" : "") + "</tr></thead><tbody>" +
+    rows.map((r) => {
+      let html = `<tr class="pick" data-id="${r.id}"><td>${r.rank}</td><td>${r.id}${r.before ? " ↻" : ""}</td><td>${SEG[r.seg] || r.seg}</td>
+        <td>${eur(r.rev180)}</td><td>${eur(r.rev90)}</td><td>${eur(r.revprev)}</td>
+        <td>${r.trend === null ? "–" : (r.trend > 0 ? "+" : "") + nf(100 * r.trend) + " %"}</td>
+        <td>${eur(r.v)}</td><td>${pct(r.p, 0)}</td><td>${eur(r.score)}</td><td>il y a ${r.recency} j</td>
+        ${truth ? `<td>${d.gone[r.i] ? "● Parti" : "Resté"}</td>` : ""}</tr>`;
+      if (openRow === r.id) {
+        const why = d.r[r.i].filter(Boolean).map((c) => `<li>${data.reasons[c]}</li>`).join("");
+        html += `<tr class="detail"><td colspan="${span}"><b>Pourquoi ce client est à risque</b>
+          <ul>${why || "<li>Aucune raison disponible</li>"}</ul>
+          ${d.freq180[r.i]} jours d'achat sur 180 jours, dont ${d.freq90[r.i]} sur les 90 derniers · écart habituel entre deux achats : ${nf(d.gap[r.i], 1)} j
+          ${r.before ? " · ↻ déjà présent dans une liste précédente" : ""}</td></tr>`;
+      }
+      return html;
+    }).join("") + (rows.length ? "" : `<tr><td class="l" colspan="${span}">Aucun client</td></tr>`) + "</tbody>";
+}
+
+$("cadence").onchange = () => { selected = 0; resetK(data.defaults.k_per_week * +$("cadence").value); };
+$("kRange").oninput = () => ($("kNum").value = $("kRange").value);
+$("kRange").onchange = () => resetK(+$("kRange").value);
+$("kNum").onchange = () => resetK(clampK($("kNum").value));
+$("rest").onchange = $("ranking").onchange = recompute;
+["retention", "margin", "cost", "scale", "scaleOn"].forEach((id) => ($(id).oninput = renderEuros));
+$("reset").onclick = () => { selected = 0; reset(); };
+$("pick").onchange = () => { selected = +$("pick").value; openRow = null; renderLists(); renderRanking(); };
+$("search").oninput = $("truth").onchange = renderRanking;
+
+$("lists").addEventListener("change", (ev) => {
+  if (ev.target.dataset.k === undefined) return;
+  ks[+ev.target.dataset.k] = clampK(ev.target.value);
+  const box = $("lists").parentElement, top = box.scrollTop;
+  recompute();
+  box.scrollTop = top;
+});
+$("lists").addEventListener("click", (ev) => {
+  const tr = ev.target.closest("tr[data-n]");
+  if (!tr || ev.target.tagName === "INPUT") return;
+  selected = +tr.dataset.n; openRow = null; $("pick").value = selected;
+  renderLists(); renderRanking();
+  $("rankTitle").scrollIntoView({ behavior: "smooth" });
+});
+$("ranktable").addEventListener("click", (ev) => {
+  const th = ev.target.closest("th[data-sort]"), tr = ev.target.closest("tr[data-id]");
+  if (th) {
+    sortDir = th.dataset.sort === sortKey ? -sortDir : ["rank", "id", "seg", "recency"].includes(th.dataset.sort) ? 1 : -1;
+    sortKey = th.dataset.sort;
+  } else if (tr) openRow = openRow === +tr.dataset.id ? null : +tr.dataset.id;
+  else return;
+  const box = $("ranktable").parentElement, top = box.scrollTop;
+  renderRanking();
+  box.scrollTop = top;
+});
+addEventListener("resize", () => data && renderEuros());
+
+load().catch((err) => { $("loading").textContent = "Erreur de chargement : " + err.message; $("loading").hidden = false; });
+</script>
+</body>
+</html>
