@@ -19,7 +19,11 @@ def test_base_config_loads_completely():
 @pytest.mark.parametrize("path", sorted(glob.glob("configs/experiments/*.yaml")))
 def test_experiments_extend_base(path):
     cfg = load_config(path)
-    assert cfg.name.startswith(cfg.model.type)
+    if path.endswith("final.yaml"):
+        # The frozen configuration of the final test (docs/plan_gel.md) is named after its role, not its model.
+        assert cfg.name == "final"
+    else:
+        assert cfg.name.startswith(cfg.model.type)
     assert cfg.label.kind in ("fixed_horizon", "relative_horizon")
 
 
