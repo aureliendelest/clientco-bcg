@@ -6,17 +6,21 @@ B2B retail case study (CentraleSupélec × BCG): customer churn prevention for C
 
 ```
 configs/         experiment definitions (YAML): base.yaml, experiments/, sweeps/
-src/churn/       the `churn` package (data and snapshots implemented; models, pipeline, evaluation and scoring are still stubs)
+src/churn/       the `churn` package
   cli.py         commands: ingest | run | sweep | collect | score
   config.py      typed configuration, YAML loading, run id, project paths
   data.py        ingestion (CSV -> shifted Parquet) and DuckDB access
   snapshots.py   snapshot tables: features, labels, segments, temporal splits
   models.py      registry (baseline, BG/NBD, logreg, HistGradientBoosting, XGBoost), calibration, tuning
-  scoring.py     value at risk V, expected value (P x V), list size K, mixed list, reasons, batch list
-  evaluation.py  metrics (from saved predictions) and impact simulation
+  scoring.py     value at risk V, expected value (P x V), list size K, reasons, batch list
+  evaluation.py  metrics, computed from saved predictions
+  impact.py      impact in M EUR and tornado table
+  comparison.py  paired comparison of runs by date, acceptance rule
+  simulation.py  value definitions and monthly lists with a rest period
   pipeline.py    run, sweep, collect
 tests/           anti-leakage and unit tests
-notebooks/       numbered analysis notebooks 01-08 and experiment_report.ipynb (reads results/ only)
+notebooks/       numbered analysis notebooks 01-09 and experiment_report.ipynb (skeleton, not filled in)
+front/           local replay dashboard of the call lists (static HTML)
 docs/            documentation (French); the case brief itself lives in docs/subject/ (not versioned)
 data/            raw and derived data (not versioned)
 runs/            one folder per run (not versioned)
@@ -35,9 +39,10 @@ Notebooks (French, run top to bottom, outputs are embedded):
 | `06_label_horizon_calibration` | Training-label horizon: 41 rules, label A vs relative label B |
 | `07_realized_revenue_loss` | Revenue actually lost by churned clients (haircut of the total-churn revenue) |
 | `08_label_rolling_backtest` | Labels A and B in a rolling backtest (monthly retraining) |
-| `experiment_report` | Figures and tables of the experiments; reads `results/` only |
+| `09_returns_matching_by_product` | Matching returns to purchases by product, effect on purchase days |
+| `experiment_report` | Skeleton only (TODO cells, never executed) |
 
-The raw transaction data (`dataset_sales_2026.csv`, ~4 GB) is not versioned; place it in `data/` or at the repo root.
+The raw transaction data (`dataset_sales_2026.csv`, ~4 GB) is not versioned; place it in `data/` (`churn ingest` only reads it there).
 
 ## Setup
 
@@ -60,15 +65,18 @@ Then open a notebook and select the `.venv` / `clientco-bcg` kernel.
 Every experiment is one YAML file (see `configs/base.yaml` for all options). Each run writes `runs/<run_id>/`; `collect` merges all runs into `results/`.
 
 ```bash
-python -m churn ingest                                   # data/sales_shifted.parquet (+2 years, once)
-python -m churn run configs/experiments/hgb.yaml         # one experiment
-python -m churn sweep configs/sweeps/models.yaml         # a series of experiments
-python -m churn collect                                  # runs/ -> results/*.parquet
-python -m churn score <run_id> --date 2026-03-22         # weekly action list (CSV)
-make test                                                # anti-leakage and unit tests
+python -m churn ingest                                      # data/sales_shifted.parquet (+2 years, once)
+python -m churn sweep configs/sweeps/final_backtest.yaml    # rolling backtest of the final configuration
+python -m churn collect                                     # runs/ -> results/*.parquet
+python -m churn collect --universe final                    # same, plus total-churn metrics for runs named final*
+python -m churn score <run_id> --date 2026-02-22            # action list of 700 clients (CSV)
+.venv/bin/python front/build.py                             # local dashboard: data/front/index.html (needs the final_backtest runs)
+make test                                                   # anti-leakage and unit tests
 ```
 
-`ingest` works; `run`, `sweep`, `collect` and `score` still exit with `not implemented yet` until their bricks are filled in.
+**Final test guard.** Any run or list dated 2026-03-22 on the real data is refused unless `CHURN_FINAL_TEST=1`. `configs/base.yaml` points to that date, so `run configs/experiments/*.yaml`, `sweep configs/sweeps/models.yaml`, `make run` and `make sweep` (default arguments) are refused without it. The final configuration is `configs/experiments/final.yaml`.
+
+The dashboard output holds client-level data: keep it local. Known gaps at the freeze: [docs/07_risks_and_open_questions.md](docs/07_risks_and_open_questions.md), section 7.
 
 ## Documentation
 

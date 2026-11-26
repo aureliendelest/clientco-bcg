@@ -1,6 +1,6 @@
 # Plan de gel (25-26/11/2026)
 
-> **Rôle** : brief d'exécution pour les trois flux E, F, S et pour l'intégrateur (I). Document de travail, supprimé après le gel.
+> **Rôle** : brief d'exécution pour les trois flux E, F, S et pour l'intégrateur (I). Document de travail, conservé après le gel car le code le cite (résultats : `03_evidence.md`, § 11).
 > **Décisions validées** : ordre 1, 2, 3, 4, 7, 9, 10, 5, 6 ; Option 2 ferme ; critères Q8 et Q9 ci-dessous ; aucun push.
 > **Échéances (brief)** : code **26/11 12h**, slides **26/11 17h**, présentation 27/11.
 
@@ -81,7 +81,7 @@ Les métriques existantes (`capture_at_k`, `size_only_capture`, `oracle_capture`
 | `channel_shift` | 1 moins la part du CA des 90 derniers jours dans le canal dominant des 90 jours précédents (NaN si pas d'achat précédent) |
 | `branch_freq_trend` | log-ratio des jours d'achat (90 j contre 90 j précédents) de l'agence principale du client (agence au plus fort CA sur 180 j), calculé sur les transactions, **jamais sur les labels**, **hors achats du client lui-même** (leave-one-out) ; NaN si l'agence a moins de 30 jours d'achat dans une des deux fenêtres |
 
-Faits sur les données (`sales_shifted.parquet`) : 5 canaux dont 3 pèsent (magasin 51 % des lignes, téléphone 40 % des lignes et 62 % du CA, en ligne 9 %), 32 % des clients n'ont qu'un canal ; 582 agences, 51 % des clients n'en ont qu'une ; 607 000 produits distincts, pas de catégorie ; lignes négatives : 3,8 % des lignes, −5,8 % du CA.
+Faits sur les données (`sales_shifted.parquet`) : 5 canaux dont 3 pèsent (magasin 51 % des lignes, téléphone 40 % des lignes et 64 % du CA, en ligne 9 %), 32 % des clients n'ont qu'un canal ; 582 agences, 51 % des clients n'en ont qu'une ; 607 000 produits distincts, pas de catégorie ; lignes négatives : 3,8 % des lignes, −5,8 % du CA.
 
 F peut simplifier une définition si le coût de calcul l'impose, en le notant dans sa note de passage. Budget : construction des 14 snapshots du sweep en moins de 20 min et sous 4 Go de mémoire DuckDB ; sinon F réduit le jeu et le dit.
 

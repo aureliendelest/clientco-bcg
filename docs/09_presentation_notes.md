@@ -2,7 +2,7 @@
 
 > **Rôle** : Storyline du deck, calendrier jusqu'au rendu, discours de justification et questions probables.
 > **Pour** : L'équipe qui prépare la soutenance du 27/11.
-> **À jour au** : 25/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
+> **À jour au** : 26/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
 
 ## 1. Storyline cible du deck (10 planches max)
 
@@ -15,7 +15,7 @@
 | 17–19/11 | Définition du churn figée, schéma de l'algorithme (fait) |
 | **20/11** | Tutorat BCG et Case Team Meeting (Zoom, créneau de 45 min par équipe) |
 | 21–23/11 | Ingestion, baseline, variables, modèles, backtest |
-| 24–25/11 | Évaluation en CA, simulation d'impact, explicabilité ; décision go/no-go maquette le 24 ; **gel du code le 25** |
+| 24–25/11 | Évaluation en CA, simulation d'impact, explicabilité ; décision go/no-go maquette le 24 ; gel prévu le 25, **configuration gelée et test final le 26** |
 | **26/11** | 12h : code. 17h : slides |
 | **27/11** | Présentation au CEO |
 
@@ -25,16 +25,16 @@
 
 Nous l'avons choisie parce que les alternatives ne tiennent pas. Avec un seuil de 60 jours, 37 % des clients rapides et 57 % des clients moyens déclarés perdus rachètent dans les trois mois suivants : on appellerait des clients qui seraient revenus seuls. Et passé ce seuil, il n'y a pas de palier naturel dans les données. Six mois est donc une convention, que nous assumons : elle est commune à tous les segments, donc comparable en euros.
 
-Nous en connaissons le coût : environ 12 % du CA classé perdu revient dans les trois mois suivants, et nous l'affichons dans nos marges.
+Nous en connaissons le coût : environ 12 % du CA classé perdu revient dans les trois mois suivants. Nos marges ne le déduisent pas : ce sont des majorants.
 
-Nous l'appliquons aux clients réguliers, qui font 95 % du chiffre d'affaires. La liste de 2 000 clients prédite par le modèle capte environ 65 % du CA réellement perdu, et la rétention reste à mesurer par un pilote. Nous avons aussi testé 41 définitions d'horizon adaptées au rythme de chaque client : elles captent entre 62 et 66 %, aucune ne se détache nettement. Nous gardons les deux labels d'entraînement, la définition simple et l'horizon adapté, et nous les évaluons sur la même vérité à six mois. »
+Nous l'appliquons aux clients réguliers, qui font 95 % du chiffre d'affaires. Au test final, la liste de 700 clients prédite par le modèle capte 51 % du CA perdu des réguliers (26 % de tout le churn), contre 7 % pour les 700 plus gros clients ; la rétention reste à mesurer par un pilote. Nous avons aussi testé 41 définitions d'horizon adaptées au rythme de chaque client : à 2 000 clients, elles captent entre 62 et 66 %, aucune ne se détache nettement. Le modèle livré utilise la définition simple. »
 
 ## 4. Questions probables
 
-- **« Pourquoi pas un seuil adapté à chaque client ? »** Nous l'avons testé : le CA capté ne change pas de façon démontrable (+1 point en moyenne, bruit du même ordre). Une définition unique est plus simple à expliquer et à piloter ; l'horizon adapté reste un second label.
-- **« Et le client qui revient après six mois ? »** Il existe : 12 % du CA classé perdu revient dans les trois mois, 17 % dans les six. Notre marge inclut cette décote ; une mesure directe sur 360 jours la situe plutôt vers 2 % (`07_realized_revenue_loss`), parce que ces clients reviennent tard et peu.
+- **« Pourquoi pas un seuil adapté à chaque client ? »** Nous l'avons testé : l'écart de CA capté est petit et dépend du modèle (+0,8 point avec HGB, −0,1 avec XGBoost, notre modèle). Une définition unique est plus simple à expliquer et à piloter.
+- **« Et le client qui revient après six mois ? »** Il existe : 12 % du CA classé perdu revient dans les trois mois, 17 % dans les six. Nos marges ne le déduisent pas. Une mesure directe sur 360 jours situe la perte non réalisée plutôt vers 2 % (`07_realized_revenue_loss`), parce que ces clients reviennent tard et peu.
 - **« Pourquoi pas douze mois ? »** Nos données couvrent deux ans : douze mois de recul ne laisseraient qu'une photo d'entraînement. Six mois est le plus long horizon que l'on puisse tester sérieusement.
-- **« Et le churn partiel ? »** Son potentiel est plus grand (509 M€ contre 125 M€), mais il est moins prévisible (AUC 0,68 contre 0,89) et rien ne dit qu'on sauve ce CA-là. Second score à confirmer en pilote, avec environ 25 % des places de la liste réservées au churn total.
-- **« Votre résultat repose sur une seule période ? »** Oui : une photo de test, en mars 2026. Nous le disons, et c'est une raison de plus pour faire un pilote randomisé, qui mesurera aussi la rétention.
+- **« Et le churn partiel ? »** Son potentiel est plus grand (509 M€ contre 125 M€), mais il est moins prévisible (AUC 0,68 contre 0,89) et rien ne dit qu'on sauve ce CA-là. Il n'est pas dans la liste livrée : c'est un second score à tester en pilote.
+- **« Votre résultat repose sur une seule période ? »** Oui : un test final en mars 2026, période déjà utilisée dans nos analyses exploratoires. Le backtest sur cinq autres dates donne un résultat proche (50,6 % en moyenne à 700), et le pilote randomisé mesurera aussi la rétention.
 
 **À mettre sur la slide :** « Parti = aucun achat pendant 6 mois. Convention commune à tous les segments, testée contre 41 variantes, sans écart net. »

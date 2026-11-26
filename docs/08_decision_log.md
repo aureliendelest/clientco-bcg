@@ -2,7 +2,21 @@
 
 > **Rôle** : L'historique daté : ce qui a été décidé, repris ou corrigé, et pourquoi. L'état actuel est dans `02_modeling_decisions.md`.
 > **Pour** : Quiconque veut comprendre comment on est arrivé aux décisions actuelles.
-> **À jour au** : 25/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
+> **À jour au** : 26/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
+
+## Gel du 25-26/11
+
+| Sujet | Décision | Pourquoi |
+|---|---|---|
+| Tendances | `freq_trend` et `rev_trend` en log-ratios | Un rapport simple explosait quand la période précédente était proche de zéro |
+| Modèles | BG/NBD ajouté comme repère statistique | Comparer à un modèle non supervisé |
+| Variables | **`basic`** ; `extended` et `market_only` rejetés | Gain inférieur au critère écrit avant les résultats ([03](03_evidence.md), § 11) |
+| Label | **A** pour le modèle final | B ne passe pas le critère (−0,1 point avec XGBoost à K = 700) |
+| Modèle | **XGBoost**, réglé par une étude Optuna de 50 essais | 49,9 % contre 48,6 % pour HGB au backtest (K = 700) |
+| Liste | Score total seul, 700 clients ; **pas de quota 25 %** | Périmètre réduit pour tenir l'échéance (`plan_gel.md`) |
+| Métriques et impact | CA capté sur tout le churn ; impact et tornade en code | Détection utilisable pour l'impact entreprise |
+| Tableau de bord | Page HTML locale au lieu de Streamlit | Rejeu des listes sans serveur |
+| Test final | Lancé le 26/11 à 15 h 12 | 51,5 % à K = 700 |
 
 ## Décisions du 25/11
 
@@ -61,3 +75,6 @@
 | **25/11** « 600 à 760 appels par mois, soit K ≈ 1 000 » | Incohérent : 600 à 760 appels donnent K ≈ 700. Les tests de répartition à K = 1 000 sont gardés comme sensibilité |
 | **25/11** « Les réguliers sont 64 % des clients, 97 % du CA, 62 % du churn total » | Vrai avec le rythme sur 365 j ; avec le périmètre réellement utilisé (180 j) : 51 %, 95 %, 52 % |
 | **25/11** « La décote de 12 % corrige le CA du churn total » | La mesure de la perte réalisée sur 360 j donne ≈ 2 % ; à intégrer plus tard |
+| **26/11** « Les marges incluent la décote de 12 % » | Aucun calcul ne l'applique |
+| **26/11** « Doubler les appels : +15 à +33 % » | +15 % correspond à une liste 40 % plus longue ; seul +33 % est un doublement |
+| **26/11** « Impact de 13 à 18 M€ » | Détection supposée de 50 % ; avec 26,1 % mesurés, 8,2 M€ au central |

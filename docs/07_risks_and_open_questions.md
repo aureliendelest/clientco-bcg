@@ -2,7 +2,7 @@
 
 > **Rôle** : Ce qui peut mal tourner, ce qui reste à décider, ce qui reste à faire.
 > **Pour** : L'équipe, à relire chaque semaine.
-> **À jour au** : 25/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
+> **À jour au** : 26/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
 
 ## 1. Vigilances pour plus tard
 
@@ -12,19 +12,19 @@ Les risques les plus coûteux sont la fuite temporelle, un signal qui arrive tro
 | --- | --- | --- |
 | Fuite temporelle (délai de label) | Avec 2 ans, une photo exige un historique avant elle et 180 jours de suivi après. Les 7 photos poolées du notebook se chevauchent : les utiliser pour entraîner puis tester ferait « voir le futur » au modèle. Une AUC supérieure à 0,95 est presque toujours une fuite | Historique des variables limité à 180 jours ; entraînement sur les photos dont le suivi finit avant la date de test ; test automatique de non-chevauchement |
 | Signal trop tardif | L'AUC de 0,90 de la récence est en partie mécanique : un client silencieux depuis 170 jours est déjà presque perdu | Juger le modèle sur sa capacité à alerter tôt (tendances de fréquence et de CA), pas sur le silence |
-| Calibration | Multiplier une probabilité par V suppose que 0,05 signifie 5 % ; un boosting brut ne le garantit pas | Calibration isotonique ou de Platt sur la validation, par segment et par classe de rythme |
+| Calibration | Multiplier une probabilité par V suppose que 0,05 signifie 5 % ; un boosting brut ne le garantit pas | Calibration isotonique sur les prédictions hors-pli, par segment de rythme |
 | Précision en baisse | Dans une liste de gros clients, le taux de base est \~2 % : la part de vrais partants sera faible même avec un bon modèle (44 % pour la liste « récence relative ») | Assumer l'échange précision contre euros ; seuil minimal de probabilité |
 | Définition de V | Le CA passé surestime ce que perdent les clients en déclin avant de partir | Tester le CA des 180 derniers jours annualisé, le CA 12 mois, une prévision |
 | Peu de partants chez les gros clients | \~240 événements par semestre dans le décile 10 : modèle instable, résultat dominé par quelques comptes | Intervalles de confiance par bootstrap ; variante par segment de valeur |
 | Grands comptes déjà suivis | Les grands comptes et clients à interlocuteur dédié feront remonter dans le classement des comptes où l'appel apporte peu | Liste séparée pour leur responsable si le client les marque. Les interviews confirment un suivi relationnel des bons clients (Sales Manager, Head of Sales) sans repérage systématique des baisses ; la liste des plus gros clients capte 22 % du CA du partiel et 14,5 % du CA du total sans modèle : le repère « taille seule » en tient compte |
 | Horizons incomparables | Avec un H par client, les taux de churn ne se comparent plus d'un segment à l'autre | Mesure commune en CA : CA réellement perdu capté dans les K premiers clients |
-| Maturité du label | Un horizon long exclut les photos les plus récentes ; les clients lents ont le plus de censure | Horizons courts pour les clients rapides ; calibrer les classes de rythme sur les données |
+| Maturité du label | Un horizon long exclut les photos les plus récentes ; les clients lents ont le plus de censure | Label B (relatif au rythme) testé ; label A retenu au gel |
 | Saisonnalité | 2 ans seulement : un seul recoupement annuel ; trois creux d'activité (mai 2023, sept. 2023, mai 2024) tombent dans les fenêtres | Ne pas utiliser de jour de semaine. **Pas de variable « mois »** (un seul recoupement annuel : le modèle la mémoriserait) ; variables relatives au rythme du client, éventuellement normalisées par l'activité globale ; amplitude mesurée : CA par jour de 71 (mai) à 123 (août), churn total de 2,5 à 3,2 % du CA selon la photo ; à signaler dans le deck |
 | Rétention non mesurée | Les 20 % de rétention du chiffrage sont une hypothèse sans mesure | Scénarios 10, 20, 30 % dans l'exercice ; pilote avec témoins dans le cas réel |
 | Sous-ensemble du réseau | Un client « perdu » a peut-être acheté hors périmètre du dataset : churn surestimé ; l'extrapolation à 15,5 Md€ suppose un échantillon représentatif | À annoncer comme limite ; question au tutorat |
 | Segments non identifiables | Contrats long terme, institutions publiques, appels d'offres : leur inactivité n'a pas le même sens | Question au tutorat ; sinon modèle par segment de valeur |
 | Adoption | OffSupp : la plupart des équipes n'ont pas adopté immédiatement ; Sales Manager sceptique | Raisons lisibles par client, Head of Sales embarqué, indicateurs d'adoption définis avant le déploiement |
-| Confidentialité | Le brief est classé confidentiel ; `docs/` n'est pas dans `.gitignore` alors que le dépôt a un remote GitHub dont la visibilité n'est pas connue | Ignorer `docs/`, `runs/`, prédictions et modèles ; ne jamais versionner de données ; ne pas coller les comptes rendus dans des outils non approuvés |
+| Confidentialité | Le brief est classé confidentiel ; `docs/subject/` n'est pas dans `.gitignore` ; dépôt GitHub privé au 26/11 (§ 7) | `runs/`, prédictions et modèles ignorés ; ne jamais versionner de données ni de documents du cas ; ne pas coller les comptes rendus dans des outils non approuvés |
 
 Rappel des règles du brief : ne livrer que ce que l'on sait expliquer et défendre, vérifier chaque chiffre, et étiqueter les preuves (Confirmé, Source unique, Déduit, Manquant).
 
@@ -48,7 +48,7 @@ Vigilances ajoutées le 24/11 :
 - **Label durable non validable.** Une seule photo possible, donc pas de découpage temporel ; il ne sert qu'au dimensionnement.
 - **Reproductibilité.** Un achat retourné laisse un net de ±1e-13 et DuckDB ne garantit pas l'ordre des lignes : sans seuil de 1 centime ni tri par client, deux exécutions donnaient 118 287 puis 118 271 clients. Parade : seuil et tri dans le code, à porter dans `src/churn/`.
 - **Quota du total et chiffre de tête.** Avec 25 % des places, le total capte 40 à 45 % (K ≈ 1 000 à 1 400) de son CA en jeu au lieu de 56 à 61 % : le chiffre de tête est plus bas que celui d'une liste entièrement dédiée au total. Parade : annoncer les deux chiffres.
-- **Capacité non documentée.** 500 appels par semaine est une hypothèse (aucun chiffre dans les documents), avec des rendements décroissants (doubler les appels : +15 à +33 % de marge). Parade : fourchette 200 à 1 800, question au tutorat.
+- **Capacité non documentée.** 500 appels par semaine est une hypothèse (aucun chiffre dans les documents), avec des rendements décroissants (+15 % de marge pour une liste mensuelle 40 % plus longue, +33 % pour une liste cumulée doublée). Parade : fourchette 200 à 1 800, question au tutorat.
 
 ## 2. Problèmes dans les documents
 
@@ -66,9 +66,9 @@ Vigilances ajoutées le 24/11 :
 
 ## 4. Questions ouvertes
 
-Trois décisions attendent une réponse de l'équipe, et neuf questions sont à poser au tutorat du 20/11. Le seuil de probabilité, les grands comptes, V par défaut, K paramétré, la décote ρ (mise de côté le 25/11) et les paliers de capacité (repris le 24/11) avaient été validés. Les recommandations ci-dessous restent des propositions tant qu'elles ne sont pas confirmées.
+Les trois décisions ci-dessous sont tranchées pour l'explicabilité et Git (appliquées dans le code) ; la répartition des rôles n'est pas tracée dans le dépôt. Neuf questions étaient à poser au tutorat du 20/11. Le seuil de probabilité, les grands comptes, V par défaut, K paramétré, la décote ρ (mise de côté le 25/11) et les paliers de capacité (repris le 24/11) avaient été validés. Les recommandations ci-dessous restent des propositions tant qu'elles ne sont pas confirmées.
 
-### Décisions en attente
+### Décisions (état au 25/11, conservées pour mémoire)
 
 | Décision | Recommandation proposée |
 | --- | --- |
@@ -110,19 +110,44 @@ Sous-ensemble de clients, pas de journal d'actions, contrats inconnus, deux ans 
 
 Le contrat d'interface (schéma de la table de photos) et le script d'ingestion débloquent tout le reste : sans eux, modèles et évaluation ne peuvent pas avancer en parallèle.
 
-- [ ] Répondre aux trois décisions en attente (section Questions ouvertes)
-- [ ] Écrire le contrat d'interface (schéma de la table de photos) avant le Nov 19, 2026
-- [ ] Ajouter à `.gitignore` : `docs/`, `runs/`, prédictions et modèles ; compléter `requirements.txt` (DuckDB, scikit-learn, XGBoost, Optuna, SHAP)
-- [ ] Écrire le script d'ingestion (+2 ans sur les deux dates) et produire `sales_shifted.parquet`
-- [ ] Mettre à jour la feuille de chiffrage du fichier de priorisation avec la part de CA perdue mesurée (3,4 à 4,8 %)
-- [ ] Préparer pour le CTM du Nov 20, 2026 la structure algorithmique et les questions au tutorat
-- [ ] Décider du tableau de bord (go ou no-go) le Nov 24, 2026
-- [ ] Geler le code le Nov 25, 2026 pour le rendu du Nov 26, 2026 à 12h
-- [x] Notebook d'exploration découpé en notebooks `01` à `05` ; synthèse périmée supprimée, décisions dans `02_modeling_decisions.md`
-- [ ] Recalculer le chiffre d'impact (détection mesurée sous contrainte de capacité, extrapolation à l'entreprise, nombre de cohortes par an à vérifier) et le reporter dans le fichier de chiffrage
-- [ ] Porter dans `src/churn/` le label partiel brut, la définition du jour d'achat net > 0,01 €, le tri par client, le repère « taille seule » et le test de répartition de K
-- [ ] Tester régression logistique et XGBoost sur les deux labels (A et B), puis un second test hors de la photo du 22/03/2026
-- [ ] Poser les questions 10 à 13 (alerte actuelle sur les baisses, grands comptes, temps et rétention, part du dataset)
-- [ ] Concevoir le pilote : deux listes randomisées, quota de 25 % pour le total, groupe témoin, indicateurs d'adoption
+- [x] Explicabilité et partage Git (la répartition des rôles n'est pas tracée)
+- [x] Contrat d'interface (`06_engineering.md`)
+- [x] `.gitignore` pour `runs/`, prédictions et modèles ; `requirements.txt` complété
+- [x] Script d'ingestion et `sales_shifted.parquet`
+- [ ] Mettre à jour la feuille de chiffrage (hors dépôt, non vérifié)
+- [ ] Préparation du CTM et questions au tutorat (non tracées dans le dépôt)
+- [x] Tableau de bord : page HTML locale (`front/`)
+- [x] Gel et test final le 26/11
+- [x] Notebooks d'exploration ; synthèse périmée supprimée
+- [x] Impact recalculé avec la détection mesurée (`05_impact_and_pilot.md`)
+- [x] Porter le jour d'achat net, le tri par client, le repère « taille seule », le label partiel
+- [ ] Porter le test de répartition de K (non fait)
+- [x] Régression logistique et XGBoost sur les labels A et B (backtest)
+- [ ] Second test hors de la période de mars (non fait)
+- [ ] Questions 10 à 13 (non tracées)
+- [ ] Concevoir le pilote en détail (décrit dans `05`, non lancé)
 
 Prochain tour de questions de cadrage : tests anti-fuite, simulation d'impact et architecture cible du cas réel. La métrique commune et le découpage de validation sont traités ; la simulation d'impact doit encore recevoir l'extrapolation à l'entreprise.
+
+## 7. Écarts connus au gel (26/11), non corrigés faute de temps
+
+**À dire si le jury pose la question**
+
+| Écart | Conséquence |
+|---|---|
+| La période du test final (22/03/2026) est celle de la photo de test des lemmes 4 à 7 et figure dans le plan glissant du notebook `08` | Le test n'est pas vierge : les choix de périmètre et de label ont été faits en la regardant |
+| Décote de 12 % (CA qui revient) appliquée dans aucun calcul | Marges majorées d'environ 12 % |
+| Liste mixte et score partiel non livrés | La liste ne cible que le churn total ; les 25 % de places sont une proposition |
+| Impact entreprise extrapolé depuis ≈ 30 % du CA ; part perdue mesurée avec l'ancien jour d'achat | 8,2 M€ est un ordre de grandeur (`05`) |
+| Une seule période de test, une seule graine, pas de bootstrap apparié | Les petits écarts entre modèles ou labels ne sont pas démontrés |
+| Lemmes 4 à 7 calculés dans les notebooks (tendances en ratios) ; le code utilise des log-ratios | Leurs CA captés ne se comparent pas au point près à ceux du code |
+
+**Code, dépôt et notebooks**
+
+- `results/` mêle 204 runs anciens (`backtest`, `backtest_bgnbd`, `horizon_days`, `truth_days`, tendances en ratios) et les nouveaux. Leur identifiant n'a pas changé : un sweep les saute sans `--force`. Ne pas utiliser leurs `model.pkl` pour `churn score`.
+- Options de configuration sans effet : `scoring.total_share_of_list`, `calls_per_week`, `dataset_share` (K vient de `list_size_k` = 700). `segmentation: per_segment` et `value_definition: ca_12m` sont refusées.
+- Les configurations par défaut visent la date de test et sont refusées sans `CHURN_FINAL_TEST=1` (`06`).
+- Le commentaire de `data.py` sur une fusion des 28 et 29 février est faux : le fichier n'a aucune ligne le 29/02/2024.
+- 2 tests sont skippés dans la suite complète et passent isolément.
+- Notebook `04` : cellule des horizons sans sortie enregistrée (lemme 2). Notebook `05` : le texte « doubler la capacité : +15 % » compare en réalité K = 1 000 à 1 400. `experiment_report.ipynb` : non rempli.
+- Les documents du cas (brief, interviews, financials), ajoutés au commit `c5f4acf` et supprimés au `70c7864`, restent dans l'historique poussé sur GitHub (dépôt privé). `docs/subject/` n'est pas ignoré par Git.

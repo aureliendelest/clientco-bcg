@@ -2,7 +2,7 @@
 
 > **Rôle** : Les preuves chiffrées derrière chaque décision, sous forme de lemmes, chacun relié à son notebook.
 > **Pour** : Quiconque doit défendre un choix devant le jury ou l'équipe.
-> **À jour au** : 25/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
+> **À jour au** : 26/11/2026. Dates : les notebooks et `03_evidence.md` utilisent les dates d'origine du dataset (22/09/2022 au 22/09/2024) ; le code, les configs et les décisions utilisent les dates décalées de +2 ans (la photo de test du 22/03/2024 devient 22/03/2026).
 
 Sources : `notebooks/04_churn_scope_total_vs_partial` (dont le recalcul des horizons du 24/11), `05_label_test_and_list_allocation`, `06_label_horizon_calibration`, `07_realized_revenue_loss` et `08_label_rolling_backtest`. Montants en M€ annualisés, **périmètre du dataset** (≈ 4,6 à 4,8 Md€ par an, soit ≈ 30 % des 15,5 Md€ de l'entreprise), non extrapolés.
 
@@ -70,6 +70,8 @@ En multiples de l'écart p90 du client, les deux segments se rapprochent au-del�
 
 **Donc** : la perte est **définie à 180 j par convention** pour tous les réguliers (commune aux segments, donc comparable en CA ; plus court est faux, plus long est à peine testable avec 2 ans de données). Ce choix a un coût mesuré : le churn total est « aucun achat en 6 mois », pas « perte définitive ». Au moins **12 % de son CA revient dans les 3 mois suivants (17 % en 6 mois)**, 8 % pour les rapides et 24 % pour les moyens. Les M€ du churn total sont des majorants de cet ordre. L'avance d'alerte vient de variables relatives au rythme du client (récence ÷ écart p90, tendance), pas du label. Le label relatif a ensuite été testé (lemme 7) et retenu comme label d'entraînement ; la vérité d'évaluation reste à 180 j.
 
+*Traçabilité (26/11).* La cellule du notebook `04` qui produit ces chiffres n'a pas de sortie enregistrée ; recalculée le 26/11, elle confirme les retours par horizon, la décote de 12 % et le délai de 249 jours. Les chiffres en multiples de l'écart p90 et la variation saisonnière de 34 à 55 % n'ont été retrouvés dans aucune cellule : ne pas les citer.
+
 *Limites.* Les photos poolées se chevauchent (mêmes clients d'un mois à l'autre) : les pourcentages sont stables d'une photo à l'autre (à 180 j, 10 à 14 % du CA revient), mais les effectifs ne sont pas indépendants. Les retours dépendent de la saison (à 60 j, la part du CA qui revient va de 34 % pour la photo d'octobre à 55 % pour celle de mars). La décote de 12 à 17 % est mesurée sur toute la population régulière, pas sur la liste de K clients.
 
 ## 4. Lemme 3 : le plafond du partiel est haut, mais ce n'est pas du CA sauvable (D2)
@@ -80,7 +82,7 @@ En multiples de l'écart p90 du client, les deux segments se rapprochent au-del�
 | Partiel brut / durable | 509 / 357 | 11,5 % / 8,1 % |
 | Contre-poids : hausses > 50 % | 826 | 18,7 % |
 
-*Preuve.* (i) 357 ≥ 2,9 × 125 : l'attrait du partiel. (ii) Seuls 66 à 72 % de son CA dure (7 photos). (iii) Les hausses pèsent plus que les baisses : le CA de ces clients oscille d'un semestre à l'autre, donc le label est bruité. (iv) Le rapport CA(B)/CA(A) de la base varie de 0,88 à 1,07 selon la photo : le partiel compare deux saisons (amplitude voisine pour les deux labels : total 2,5 à 3,2 %, partiel 10,3 à 14,0 %). **Donc** 357 M€ est un majorant, pas un gisement. ∎
+*Preuve.* (i) 357 ≈ 2,9 × 125 : l'attrait du partiel. (ii) Seuls 66 à 72 % de son CA dure (7 photos). (iii) Les hausses pèsent plus que les baisses : le CA de ces clients oscille d'un semestre à l'autre, donc le label est bruité. (iv) Le rapport CA(B)/CA(A) de la base varie de 0,88 à 1,07 selon la photo : le partiel compare deux saisons (amplitude voisine pour les deux labels : total 2,5 à 3,2 %, partiel 10,3 à 14,0 %). **Donc** 357 M€ est un majorant, pas un gisement. ∎
 
 *Réserve (lemme 2).* Les 125 M€ du total sont eux aussi un majorant : ≈ 12 % du CA des clients réguliers déclarés perdus à 180 j revient dans les 3 mois suivants (8 % pour les rapides, 24 % pour les moyens). Cette décote ne change pas l'ordre de grandeur du rapport entre les deux labels (357 / 125 ≈ 2,9 contre ≈ 3,2 après décote du total seul) ; elle est mesurée sur les réguliers, pas sur les lents ni l'historique court.
 
@@ -131,7 +133,7 @@ Marge (M€/an, K = 2 000 ; entre parenthèses, scénarios bas–haut sur persis
 
 **Résultat** (notebook `05` ; bootstrap sur 200 tirages ; 4 scénarios : lecture « CA capté » ou « surplus », rétention du partiel égale à celle du total ou moitié moindre). Dans les 8 cas, la meilleure répartition réserve **10 à 25 % des places au total** ; 0 % n'est jamais la meilleure et 100 % est la pire. Le gain est faible à rétention égale (+3 %) mais atteint +10 à +40 % dans les scénarios prudents : le quota assure contre la rétention incertaine du partiel. **25 % ne perd jamais plus de 0,1 M€ face à la meilleure répartition : ≈ 250 places à K = 1 000, ≈ 1 000 à K = 4 000.** Coût pour le chiffre de tête : le total capte alors 40 % (K = 1 000) ou 63 % (K = 4 000) de son CA en jeu, contre 56 % et 74 % avec toute la liste. Une seule photo de test : le bootstrap mesure le bruit d'échantillonnage, pas la variation d'une saison à l'autre.
 
-**Scénario à 1 000 appels par semaine** (K ≈ 1 400 mensuel, K ≈ 8 000 cumulé) : même conclusion (10 à 25 % des places au total). Rendements décroissants : doubler les appels n'augmente la marge, en lecture « CA capté » à rétention égale, que de +15 % (liste mensuelle) à +33 % (liste cumulée), et presque pas en lecture « surplus ».
+**Scénario à 1 000 appels par semaine** (K ≈ 1 400 mensuel, K ≈ 8 000 cumulé) : même conclusion (10 à 25 % des places au total). Rendements décroissants, en lecture « CA capté » à rétention égale : la liste cumulée doublée (K 4 000 → 8 000) donne +33 % de marge ; la liste mensuelle comparée de K 1 000 à 1 400, soit +40 % de places et non le double, donne +15 %. Presque aucun gain en lecture « surplus ».
 
 ## 9. Lemme 7 : un label d'entraînement relatif au rythme, évalué contre la vérité à 180 j
 
@@ -192,12 +194,46 @@ B fait mieux que A sur 6 dates sur 7. Une partie de l'écart tient au nombre de 
 
 ## 10. Ce que chaque lemme décide
 
+État au gel : le lemme 6 (deux scores) n'est pas livré, et le modèle final utilise le label A (§ 11). La photo de test des lemmes 4 à 7 (22/03/2024) est la période du test final.
+
 | Lemme | Décision (détail dans `02_modeling_decisions.md`) |
 |---|---|
 | 1 | Périmètre : les clients réguliers (51 % des clients, 95 % du CA, rythme sur 180 j) |
-| 2 | Vérité à 180 jours, par convention ; horizons courts exclus ; décote de 12 % du CA du total |
+| 2 | Vérité à 180 jours, par convention ; horizons courts exclus ; décote de 12 % du CA du total mesurée, non appliquée dans les calculs |
 | 3 | Le partiel n'est pas un gisement de CA sauvable : second score, hors chiffre de tête |
 | 4 | Le total est le label principal et le chiffre de tête |
 | 5 | Aucun label ne domine en marge : la rétention se mesure par pilote |
 | 6 | Pas de label élargi ; deux scores avec ≈ 25 % des places au total |
 | 7 | Deux labels d'entraînement gardés, A (180 j pour tous) et B (relatif au rythme) |
+
+## 11. Résultats du code : backtest, gel et test final (25-26/11)
+
+Source : `results/metrics.parquet` et `results/runs.parquet`. **Dates décalées (+2 ans).** Réguliers, vérité à 180 jours, classement par P × V.
+
+**Backtest** (moyenne des 5 dates du 22/10/2025 au 22/02/2026, label A, CA capté) :
+
+| Modèle | K = 700 | K = 2 000 |
+|---|---|---|
+| Baseline récence ÷ p90 (*) | 44,4 % | 56,0 % |
+| Régression logistique (*) | 45,5 % | 60,2 % |
+| BG/NBD (*) | 46,2 % | 58,9 % |
+| HistGradientBoosting | 48,6 % | 64,2 % |
+| XGBoost | 49,9 % | 64,2 % |
+| XGBoost réglé (configuration finale) | 50,6 % | 65,4 % |
+
+(*) Runs antérieurs au passage des tendances en log-ratios : comparaison indicative. Le gain du réglage est un peu optimiste (Optuna a vu des données plus récentes que les premières dates).
+
+**Variables.** Critère écrit avant les résultats : +1,5 point à K = 700 sur HGB et XGBoost, 4 dates sur 5. `extended` : +0,6 (HGB, 4 dates) et +0,4 (XGBoost, 3 dates). `market_only` : +0,7 (3 dates) et −0,5 (0 date). **Les deux sont rejetés : `basic`.**
+
+**Test final** (photo du 22/03/2026, run `final-14fde1d325`, un seul run du test dans `runs/`) : 61 302 réguliers, 2 226 partants (3,6 %), 60,7 M€ de CA parti. IC 95 % entre crochets.
+
+| Mesure | K = 700 | K = 2 000 | K = 4 000 |
+|---|---|---|---|
+| CA capté, réguliers | **51,5 %** [46–57] | **66,2 %** [61–71] | 76,4 % [72–80] |
+| Taille seule | 7,3 % | 14,5 % | 19,9 % |
+| Oracle | 80,6 % | 99,3 % | 100 % |
+| CA capté, **tout le churn** | **26,1 %** [23–30] | 33,6 % | 38,8 % |
+| Taille seule, tout le churn | 3,7 % | 8,8 % | 13,6 % |
+| Oracle, tout le churn | 50,2 % | 69,2 % | 81,6 % |
+
+AUC 0,89, PR-AUC 0,39. Brier brut 0,0272 et calibré 0,0272 : la calibration n'améliore pas le Brier sur le test. Liste de 700 : 54 % de vrais partants, 31,3 M€ de CA capté, soit **1,54 M€ de marge à r = 20 %** (0,77 à 2,31 de r = 10 à 30 %), sans décote (1,36 M€ à r = 20 % avec 12 %).
