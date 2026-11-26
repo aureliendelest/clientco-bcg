@@ -7,151 +7,272 @@
 <style>
 :root {
   color-scheme: light;
-  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(42,120,214,.09);
+  --page: #f3f4f7; --surface: #ffffff; --surface-2: #f7f8fa; --ink: #0d1220; --ink-2: #4b5263; --muted: #7d8494;
+  --grid: #e8eaf0; --axis: #cdd1db; --border: #e3e6ed; --wash: rgba(42,120,214,.08); --accent: #2a78d6; --accent-ink: #1c5cab;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --bad: #b42f2f; --bad-wash: rgba(208,59,59,.10); --good: #006300; --good-wash: rgba(12,163,12,.11);
+  --shadow: 0 1px 2px rgba(13,18,32,.05), 0 6px 20px -12px rgba(13,18,32,.18);
+  --hero-1: #0f1f3d; --hero-2: #1c4a8c;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(57,135,229,.16);
+    --page: #0c0e12; --surface: #15181e; --surface-2: #1b1f27; --ink: #eef0f5; --ink-2: #b9bfcc; --muted: #848b9a;
+    --grid: #262b35; --axis: #3a404d; --border: #262b35; --wash: rgba(57,135,229,.16); --accent: #3987e5; --accent-ink: #86b6ef;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --bad: #f08080; --bad-wash: rgba(208,59,59,.20); --good: #4cc94c; --good-wash: rgba(12,163,12,.18);
+    --shadow: none; --hero-1: #101a30; --hero-2: #17396b;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
-h1 { font-size: 20px; margin: 0 0 4px; }
-h2 { font-size: 15px; margin: 0 0 10px; }
-p.sub { margin: 0; color: var(--ink-2); }
-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
-.params { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; }
-.params + .params { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--grid); }
-.group { width: 100%; color: var(--muted); font-size: 12px; margin-bottom: -6px; }
-label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); }
-label.inline { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 6px; }
-select, input[type=number], input[type=search], button {
-  font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px;
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+h2 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+p { margin: 0; }
+
+header { background: linear-gradient(120deg, var(--hero-1), var(--hero-2)); color: #fff; }
+.bar { max-width: 1440px; margin: 0 auto; padding: 18px 24px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+header h1 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -.02em; }
+header p { color: rgba(255,255,255,.72); font-size: 13px; margin-top: 2px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.09); border-radius: 999px; padding: 4px 12px; font-size: 12px; }
+
+#loading { max-width: 1440px; margin: 0 auto; padding: 40px 24px; color: var(--ink-2); }
+#app { max-width: 1440px; margin: 0 auto; padding: 20px 24px 48px; display: grid; grid-template-columns: 292px minmax(0, 1fr); gap: 20px; align-items: start; }
+.content { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.card-head { padding: 16px 18px 12px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between; }
+.card-head p { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+aside { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; padding: 4px 18px 18px; }
+aside h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 16px 0 12px; }
+aside h3 + * { margin-top: 0; }
+.divider { border: 0; border-top: 1px solid var(--border); margin: 18px -18px 0; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; font-size: 12.5px; color: var(--ink-2); font-weight: 550; }
+.field small { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+select, input[type=number], input[type=search] {
+  font: inherit; font-weight: 400; color: var(--ink); background: var(--surface-2); border: 1px solid var(--axis); border-radius: 8px; padding: 7px 10px; width: 100%; min-width: 0;
 }
-input[type=number] { width: 96px; }
-button { cursor: pointer; }
-.kline { display: flex; gap: 8px; align-items: center; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 14px; }
-.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
-.tile .name { color: var(--ink-2); font-size: 12px; }
-.tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.kbig { display: flex; align-items: center; gap: 10px; }
+.kbig input { width: 104px; font-size: 22px; font-weight: 650; padding: 4px 10px; font-variant-numeric: tabular-nums; }
+.seg { display: flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg button { flex: 1; font: inherit; font-size: 12.5px; font-weight: 500; border: 0; background: transparent; color: var(--ink-2); border-radius: 7px; padding: 6px 4px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--ink); }
+.seg button.on { background: var(--accent); color: #fff; box-shadow: 0 1px 3px rgba(13,18,32,.22); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.ghost { margin-top: 18px; width: 100%; font: inherit; font-size: 12.5px; color: var(--ink-2); background: transparent; border: 1px solid var(--axis); border-radius: 8px; padding: 8px; cursor: pointer; }
+.ghost:hover { background: var(--surface-2); color: var(--ink); }
+
+.warn { background: var(--bad-wash); border: 1px solid var(--s2); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.tile { padding: 15px 18px 16px; display: flex; flex-direction: column; gap: 4px; }
+.tile.hero { background: linear-gradient(var(--wash), var(--wash)), var(--surface); border-color: var(--accent); }
+.tile .name { color: var(--ink-2); font-size: 12.5px; font-weight: 550; }
+.tile .value { font-size: 31px; font-weight: 700; letter-spacing: -.025em; line-height: 1.15; }
 .tile .note { color: var(--muted); font-size: 12px; }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; margin-bottom: 6px; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
-.scroll { overflow: auto; border: 1px solid var(--grid); border-radius: 6px; }
-.scroll.tall { max-height: 560px; }
-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; }
-th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); }
-th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-size: 12px; font-weight: 600; z-index: 1; }
-th[data-sort] { cursor: pointer; }
+.nowrap { white-space: nowrap; }
+.meter { position: relative; height: 8px; border-radius: 4px; background: var(--wash); margin: 4px 0 5px; }
+.meter i { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 4px; }
+.meter b { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; border-radius: 2px; box-shadow: 0 0 0 2px var(--surface); }
+.key { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+
+nav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button { font: inherit; font-weight: 550; color: var(--ink-2); background: none; border: 0; border-bottom: 3px solid transparent; padding: 9px 14px 8px; cursor: pointer; white-space: nowrap; }
+nav button:hover { color: var(--ink); }
+nav button.on { color: var(--accent-ink); border-bottom-color: var(--accent); }
+.panel { display: flex; flex-direction: column; gap: 16px; }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; }
+#chart { padding: 0 18px 12px; }
+.scroll { overflow: auto; border-top: 1px solid var(--border); border-radius: 0 0 13px 13px; }
+.scroll.tall { max-height: 66vh; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th, td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--grid); }
+th:first-child, td:first-child { padding-left: 18px; }
+th:last-child, td:last-child { padding-right: 18px; }
+th { position: sticky; top: 0; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; z-index: 1; }
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]:hover, th.sorted { color: var(--ink); }
+tbody tr:last-child td { border-bottom: 0; }
 td.l, th.l { text-align: left; }
 tr.pick { cursor: pointer; }
-tr.pick:hover, tr.sel { background: var(--wash); }
-tr.detail td { text-align: left; white-space: normal; background: var(--page); color: var(--ink-2); }
-tfoot td { font-weight: 600; }
-td input[type=number] { width: 76px; padding: 2px 6px; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
-.warn { color: var(--ink); border-left: 3px solid var(--s2); padding-left: 8px; margin: 8px 0 0; }
-#tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 6px 10px; font-size: 12px; display: none; z-index: 5; }
+tr.pick:hover td, tr.sel td, tr.open td { background: var(--wash); }
+tr.sel td:first-child, tr.open td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+#ranktable th, #ranktable td:not([colspan]) { padding-left: 8px; padding-right: 8px; }
+#ranktable th:first-child, #ranktable td:first-child:not([colspan]) { padding-left: 16px; }
+#ranktable th:last-child, #ranktable td:last-child:not([colspan]) { padding-right: 16px; }
+#ranktable .cellbar span { width: 34px; }
+tfoot td { font-weight: 700; border-top: 2px solid var(--axis); border-bottom: 0; background: var(--surface-2); }
+td input[type=number] { width: 80px; padding: 4px 8px; }
+.sub { display: block; font-size: 11.5px; color: var(--muted); }
+.strong { font-weight: 650; }
+.rank { display: inline-grid; place-items: center; min-width: 30px; height: 24px; padding: 0 6px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; font-weight: 650; }
+.rank.top { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+.pill.down, .pill.gone { background: var(--bad-wash); color: var(--bad); }
+.pill.up, .pill.stay { background: var(--good-wash); color: var(--good); }
+.cellbar { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.cellbar span { display: block; width: 56px; height: 6px; border-radius: 3px; background: var(--wash); overflow: hidden; }
+.cellbar i { display: block; height: 100%; background: var(--s1); border-radius: 3px; }
+.cellbar em { font-style: normal; min-width: 38px; }
+
+tr.detail td { text-align: left; white-space: normal; background: var(--surface-2); padding: 16px 18px; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; max-width: 900px; }
+.detail h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.why { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; counter-reset: why; }
+.why li { counter-increment: why; display: flex; gap: 10px; align-items: baseline; }
+.why li::before { content: counter(why); flex: none; width: 19px; height: 19px; border-radius: 50%; background: var(--wash); color: var(--accent-ink); font-size: 11px; font-weight: 700; display: grid; place-items: center; align-self: center; }
+.compare { display: grid; grid-template-columns: auto 1fr auto; gap: 7px 10px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.compare span { height: 12px; display: block; }
+.compare i { display: block; height: 100%; background: var(--s1); border-radius: 0 4px 4px 0; min-width: 1px; }
+.compare i.before { background: var(--axis); }
+.facts { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.toolbar select, .toolbar input[type=search] { width: auto; }
+.notes { margin: 0; padding: 4px 18px 20px 36px; color: var(--ink-2); display: flex; flex-direction: column; gap: 8px; max-width: 800px; }
+#tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--axis); border-radius: 10px; box-shadow: 0 8px 28px -8px rgba(0,0,0,.35); padding: 9px 12px; font-size: 12px; display: none; z-index: 5; }
+#tip div { display: flex; justify-content: space-between; gap: 18px; margin-top: 3px; color: var(--ink-2); }
+#tip strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+svg { display: block; }
 svg text { fill: var(--muted); font-size: 11px; }
-ul.notes { margin: 0; padding-left: 18px; color: var(--ink-2); }
+svg text.val { fill: var(--ink); font-weight: 650; }
+svg .hit:hover { fill: var(--wash); }
+
+@media (max-width: 1000px) {
+  #app { grid-template-columns: minmax(0, 1fr); padding: 14px 14px 32px; }
+  aside { position: static; max-height: none; }
+  .bar { padding: 16px 14px; }
+}
 </style>
 </head>
 <body>
-<main>
-  <h1>Prévention du churn : listes d'appels</h1>
-  <p class="sub">Rejeu historique sur le backtest, périmètre des clients réguliers du dataset. Données clients confidentielles : ne pas diffuser.</p>
-  <p id="loading">Chargement des données…</p>
+<header>
+  <div class="bar">
+    <div>
+      <h1>Prévention du churn · listes d'appels</h1>
+      <p>ClientCo · clients réguliers du dataset</p>
+    </div>
+    <div class="chips">
+      <span class="chip">Rejeu historique</span>
+      <span class="chip" id="period"></span>
+      <span class="chip">🔒 Confidentiel : ne pas diffuser</span>
+    </div>
+  </div>
+</header>
 
-  <div id="app" hidden>
-    <section>
-      <div class="params">
-        <div class="group">Paramètres qui changent les listes</div>
-        <label>Cadence
-          <select id="cadence">
-            <option value="1">Toutes les semaines</option>
-            <option value="2" selected>Par quinzaine</option>
-            <option value="4">Toutes les 4 semaines</option>
-          </select>
-        </label>
-        <label>Appels par liste (K)
-          <span class="kline"><input id="kRange" type="range" min="20" step="10"><input id="kNum" type="number" min="0" step="10"></span>
-        </label>
-        <label>Repos avant rappel
-          <select id="rest">
-            <option value="0">Aucun</option><option value="30">30 jours</option><option value="60">60 jours</option>
-            <option value="90" selected>90 jours</option><option value="180">180 jours</option>
-          </select>
-        </label>
-        <label>Classement
-          <select id="ranking">
-            <option value="ev">Probabilité × CA 180 j × 2 (référence)</option>
-            <option value="evr">Probabilité × CA 90 j × 4 (CA récent)</option>
-          </select>
-        </label>
-        <button id="reset">Réinitialiser</button>
-      </div>
-      <div class="params">
-        <div class="group">Paramètres qui ne changent que les euros</div>
-        <label>Rétention (% des partants captés sauvés)<input id="retention" type="number" min="0" max="100" step="1"></label>
-        <label>Marge brute (%)<input id="margin" type="number" min="0" max="100" step="0.05"></label>
-        <label>Coût par appel (€)<input id="cost" type="number" min="0" step="5" value="0"></label>
-        <label class="inline"><input id="scaleOn" type="checkbox"> Extrapoler à l'entreprise ×
-          <input id="scale" type="number" min="1" step="0.1" value="3.3"> (non validé)</label>
-      </div>
-      <p id="warn" class="warn" hidden></p>
-    </section>
+<p id="loading">Chargement des données…</p>
 
+<div id="app" hidden>
+  <aside class="card" aria-label="Paramètres">
+    <h3>Les listes</h3>
+    <div class="field">Cadence
+      <input type="hidden" id="cadence" value="2">
+      <div class="seg" data-for="cadence">
+        <button type="button" data-v="1">1 sem.</button><button type="button" data-v="2">Quinzaine</button><button type="button" data-v="4">4 sem.</button>
+      </div>
+    </div>
+    <div class="field">Appels par liste (K)
+      <div class="kbig"><input id="kNum" type="number" min="0" step="10" aria-label="Appels par liste"><small id="kHint"></small></div>
+      <input id="kRange" type="range" min="20" step="10" aria-label="Appels par liste, curseur">
+    </div>
+    <div class="field">Repos avant rappel (jours)
+      <input type="hidden" id="rest" value="90">
+      <div class="seg" data-for="rest">
+        <button type="button" data-v="0">0</button><button type="button" data-v="30">30</button><button type="button" data-v="60">60</button><button type="button" data-v="90">90</button><button type="button" data-v="180">180</button>
+      </div>
+    </div>
+    <label class="field">Classement par probabilité ×
+      <select id="ranking">
+        <option value="ev">CA 180 j × 2 (référence)</option>
+        <option value="evr">CA 90 j × 4 (CA récent)</option>
+      </select>
+    </label>
+
+    <hr class="divider">
+    <h3>Les euros <small style="text-transform:none;letter-spacing:0;font-weight:400">(listes inchangées)</small></h3>
+    <label class="field">Rétention (%)<input id="retention" type="number" min="0" max="100" step="1"><small>Part des partants captés que l'appel retient</small></label>
+    <div class="pair">
+      <label class="field">Marge brute (%)<input id="margin" type="number" min="0" max="100" step="0.05"></label>
+      <label class="field">Coût/appel (€)<input id="cost" type="number" min="0" step="5" value="0"></label>
+    </div>
+    <div class="field">
+      <label class="check"><input id="scaleOn" type="checkbox"> Extrapoler à l'entreprise</label>
+      <div class="kbig"><span>×</span><input id="scale" type="number" min="1" step="0.1" value="3.3" aria-label="Facteur d'extrapolation" style="font-size:14px;font-weight:400;width:80px"><small>non validé</small></div>
+    </div>
+    <button id="reset" type="button" class="ghost">Réinitialiser les paramètres</button>
+  </aside>
+
+  <main class="content">
+    <p id="warn" class="warn" hidden></p>
     <div class="tiles" id="tiles"></div>
 
-    <section>
-      <h2>CA des partants capté par mois</h2>
-      <div class="legend">
-        <span><i style="background:var(--s1)"></i>Modèle</span>
-        <span><i style="background:var(--s2)"></i>Plus gros clients (sans modèle)</span>
-        <span><i style="background:var(--s3)"></i>Oracle (plafond indicatif)</span>
-      </div>
-      <div id="chart"></div>
-      <div class="scroll"><table id="months"></table></div>
-    </section>
+    <nav>
+      <button type="button" data-tab="overview" class="on">Synthèse</button>
+      <button type="button" data-tab="calls">Listes</button>
+      <button type="button" data-tab="clients">Clients</button>
+      <button type="button" data-tab="method">Méthode</button>
+    </nav>
 
-    <section>
-      <h2>Les listes de la période</h2>
-      <p class="sub" style="margin-bottom:10px">Modifiez K sur une ligne : cette liste et les suivantes sont recalculées avec le repos. Cliquez sur une ligne pour voir ses clients.</p>
-      <div class="scroll tall"><table id="lists"></table></div>
-    </section>
+    <div class="panel" id="tab-overview">
+      <section class="card">
+        <div class="card-head">
+          <div><h2>CA des partants capté par mois</h2><p>Nouveaux partants captés par les listes du mois</p></div>
+          <div class="legend">
+            <span><i class="key" style="background:var(--s1)"></i>Modèle</span>
+            <span><i class="key" style="background:var(--s2)"></i>Plus gros clients (sans modèle)</span>
+            <span><i class="key" style="background:var(--s3)"></i>Oracle (plafond indicatif)</span>
+          </div>
+        </div>
+        <div id="chart"></div>
+        <div class="scroll"><table id="months"></table></div>
+      </section>
+    </div>
 
-    <section>
-      <h2 id="rankTitle">Classement des clients</h2>
-      <div class="toolbar">
-        <label>Liste du<select id="pick"></select></label>
-        <label>Chercher un client<input id="search" type="search" placeholder="Identifiant"></label>
-        <label class="inline"><input id="truth" type="checkbox"> Afficher ce qui s'est réellement passé</label>
-      </div>
-      <div class="scroll tall"><table id="ranktable"></table></div>
-    </section>
+    <div class="panel" id="tab-calls" hidden>
+      <section class="card">
+        <div class="card-head">
+          <div><h2>Les listes de la période</h2><p>Modifiez K sur une ligne : cette liste et les suivantes sont recalculées. Cliquez sur une ligne pour voir ses clients.</p></div>
+        </div>
+        <div class="scroll tall"><table id="lists"></table></div>
+      </section>
+    </div>
 
-    <section>
-      <h2>Comment lire ces chiffres</h2>
-      <ul class="notes">
-        <li><b>CA capté</b> : CA annualisé (CA des 180 jours × 2) des clients qui sont réellement partis (aucun achat pendant 180 jours) et qui figuraient dans une liste. Ce n'est pas du CA sauvé.</li>
-        <li>Chaque partant est compté une seule fois, à la première liste qui le capte, avec la même valeur quelle que soit la cadence.</li>
-        <li><b>Marge</b> = rétention × marge brute × CA capté − coût × appels. La rétention est une hypothèse que seul un pilote mesurera.</li>
-        <li>Ce cumul sur toute la période ne se compare pas au CA capté ni à la marge d'une seule liste de 700 clients du backtest.</li>
-        <li>Le rejeu suppose que les appels ne changent pas le comportement des clients, donc pas les listes suivantes.</li>
-        <li>Le résultat réel n'est connu que 180 jours après la liste : en production, la liste du jour n'a pas de CA capté.</li>
-        <li>Une seule période, avec les modèles mensuels du backtest. La date du test final n'est pas utilisée.</li>
-      </ul>
-    </section>
-  </div>
-  <div id="tip"></div>
-</main>
+    <div class="panel" id="tab-clients" hidden>
+      <section class="card">
+        <div class="card-head">
+          <div><h2 id="rankTitle">Classement des clients</h2><p>Cliquez sur un client pour voir pourquoi il est à risque.</p></div>
+          <div class="toolbar">
+            <select id="pick" aria-label="Liste affichée"></select>
+            <input id="search" type="search" placeholder="Chercher un client" aria-label="Chercher un client">
+            <label class="check"><input id="truth" type="checkbox"> Résultat réel</label>
+          </div>
+        </div>
+        <div class="scroll tall"><table id="ranktable"></table></div>
+      </section>
+    </div>
+
+    <div class="panel" id="tab-method" hidden>
+      <section class="card">
+        <div class="card-head"><h2>Comment lire ces chiffres</h2></div>
+        <ul class="notes">
+          <li><b>CA capté</b> : CA annualisé (CA des 180 jours × 2) des clients qui sont réellement partis (aucun achat pendant 180 jours) et qui figuraient dans une liste. Ce n'est pas du CA sauvé.</li>
+          <li>Chaque partant est compté une seule fois, à la première liste qui le capte, avec la même valeur quelle que soit la cadence.</li>
+          <li><b>Marge</b> = rétention × marge brute × CA capté − coût × appels. La rétention est une hypothèse que seul un pilote mesurera.</li>
+          <li>Ce cumul sur toute la période ne se compare pas au CA capté ni à la marge d'une seule liste de 700 clients du backtest.</li>
+          <li>Le rejeu suppose que les appels ne changent pas le comportement des clients, donc pas les listes suivantes.</li>
+          <li>Le résultat réel n'est connu que 180 jours après la liste : en production, la liste du jour n'a pas de CA capté.</li>
+          <li>Une seule période, avec les modèles mensuels du backtest. La date du test final n'est pas utilisée.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+</div>
+<div id="tip"></div>
 
 <script id="blob" type="text/plain">__DATA__</script>
 <script>
@@ -165,9 +286,10 @@ const money = (x) => (Math.abs(x) >= 1e6 ? nf(x / 1e6, 1) + " M€" : Math.abs(x
 const pct = (x, d = 1) => (Number.isFinite(x) ? nf(100 * x, d) + " %" : "–");
 const frDate = (iso) => iso.split("-").reverse().join("/");
 const monthName = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("fr-FR", { month: "short", year: "numeric", timeZone: "UTC" });
-const SEG = { fast: "Rapide", medium: "Moyen" };
+const SEG = { fast: "Rythme rapide", medium: "Rythme moyen" };
+const cellBar = (share, label) => `<span class="cellbar"><span><i style="width:${Math.min(100, Math.max(0, 100 * share))}%"></i></span><em>${label}</em></span>`;
 
-let data, sim, ks, selected = 0, openRow = null, sortKey = "rank", sortDir = 1;
+let data, sim, ks, selected = 0, openRow = null, sortKey = "rank", sortDir = 1, tab = "overview";
 
 async function load() {
   const bytes = Uint8Array.from(atob($("blob").textContent.trim()), (c) => c.charCodeAt(0));
@@ -176,6 +298,15 @@ async function load() {
   $("loading").hidden = true;
   $("app").hidden = false;
   reset();
+}
+
+function syncSegments() {
+  document.querySelectorAll(".seg").forEach((seg) =>
+    seg.querySelectorAll("button").forEach((b) => {
+      const on = b.dataset.v === $(seg.dataset.for).value;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on);
+    }));
 }
 
 function reset() {
@@ -197,6 +328,7 @@ function resetK(k) {
   $("kRange").value = k; $("kNum").value = k;
   selected = Math.min(selected, n - 1);
   openRow = null;
+  syncSegments();
   recompute();
 }
 
@@ -208,7 +340,9 @@ function recompute() {
   $("warn").textContent = short.length
     ? "Listes incomplètes (" + short.map(([n, name]) => `${n} pour ${name}`).join(", ") +
       ") : plus assez de clients disponibles dans les candidats embarqués. Réduisez K ou le repos, sinon la comparaison est faussée." : "";
-  $("pick").innerHTML = sim.model.map((l, n) => `<option value="${n}">${frDate(l.date.date)} (${nf(l.rows.length)} clients)</option>`).join("");
+  const custom = ks.some((k) => k !== ks[0]);
+  $("kHint").textContent = custom ? "K ajusté liste par liste" : `soit ${nf(ks[0] / +$("cadence").value)} par semaine`;
+  $("pick").innerHTML = sim.model.map((l, n) => `<option value="${n}">Liste du ${frDate(l.date.date)} · ${nf(l.rows.length)} clients</option>`).join("");
   $("pick").value = selected;
   renderEuros(); renderLists(); renderRanking();
 }
@@ -235,14 +369,19 @@ function renderEuros() {
   const t = totals(sim.model), s = totals(sim.size), o = totals(sim.oracle), e = euroParams();
   const first = sim.model[0].date.date, last = sim.model[sim.model.length - 1].date.date;
   const end = new Date(Date.parse(last + "T00:00:00Z") + (7 * +$("cadence").value - 1) * 86400000).toISOString().slice(0, 10);
-  const scope = e.f === 1 ? "dataset (≈ 30 % du CA)" : `entreprise, extrapolation × ${nf(e.f, 1)} non validée`;
-  const tile = (name, value, note) => `<div class="tile"><div class="name">${name}</div><div class="value">${value}</div><div class="note">${note}</div></div>`;
+  $("period").textContent = `${frDate(first)} → ${frDate(end)}`;
+  const scope = e.f === 1 ? "Dataset (≈ 30 % du CA)" : `Entreprise : extrapolation × ${nf(e.f, 1)} non validée`;
+  const [sm, ss, so] = [t, s, o].map((x) => x.capturedV / data.total_loss);
+  const tile = (name, value, note, extra = "", cls = "") =>
+    `<div class="card tile ${cls}"><div class="name">${name}</div><div class="value">${value}</div>${extra}<div class="note">${note}</div></div>`;
+  const meter = `<div class="meter" role="img" aria-label="Modèle ${pct(sm)}, plus gros clients ${pct(ss)}, oracle ${pct(so)}">
+    <i style="width:${100 * sm}%"></i><b style="left:${100 * ss}%;background:var(--s2)"></b><b style="left:${100 * so}%;background:var(--s3)"></b></div>`;
   $("tiles").innerHTML =
-    tile("CA annuel des partants capté", money(e.f * t.capturedV), `${frDate(first)} → ${frDate(end)} · ${scope}`) +
-    tile("Part du CA des partants", pct(t.capturedV / data.total_loss),
-         `plus gros clients ${pct(s.capturedV / data.total_loss)} · oracle ${pct(o.capturedV / data.total_loss)}`) +
     tile(e.cost > 0 ? "Marge nette sauvée" : "Marge brute sauvée", money(marginOf(t.capturedV, t.calls)),
-         `rétention ${nf(100 * e.r)} % · marge ${nf(100 * e.m, 2)} % · ${e.cost > 0 ? "coût d'appel déduit" : "coût d'appel non déduit"}`) +
+         `Rétention ${nf(100 * e.r)} % · marge ${nf(100 * e.m, 2)} % · ${e.cost > 0 ? "coût d'appel déduit" : "coût d'appel non déduit"}`, "", "hero") +
+    tile("CA annuel des partants capté", money(e.f * t.capturedV), scope) +
+    tile("Part du CA des partants", pct(sm),
+         `<span class="nowrap"><i class="key" style="background:var(--s2)"></i>plus gros ${pct(ss)}</span> &nbsp; <span class="nowrap"><i class="key" style="background:var(--s3)"></i>oracle ${pct(so)}</span>`, meter) +
     tile("Appels", nf(e.f * t.calls), `${sim.model.length} listes · ${nf(e.f * t.distinct)} clients distincts · ${nf(e.f * t.churners)} partants captés`);
 
   const months = byMonth();
@@ -250,8 +389,8 @@ function renderEuros() {
   $("months").innerHTML =
     `<thead><tr><th class="l">Mois</th><th>Listes</th><th>Appels</th><th>Partants captés</th><th>CA capté, modèle</th>
      <th>Plus gros clients</th><th>Oracle</th><th>Marge sauvée</th></tr></thead><tbody>` +
-    months.map((m) => `<tr><td class="l">${m.label}</td><td>${m.lists}</td><td>${nf(e.f * m.calls)}</td><td>${nf(e.f * m.churners)}</td>
-      <td>${money(e.f * m.model)}</td><td>${money(e.f * m.size)}</td><td>${money(e.f * m.oracle)}</td><td>${money(marginOf(m.model, m.calls))}</td></tr>`).join("") +
+    months.map((m) => `<tr><td class="l strong">${m.label}</td><td>${m.lists}</td><td>${nf(e.f * m.calls)}</td><td>${nf(e.f * m.churners)}</td>
+      <td class="strong">${money(e.f * m.model)}</td><td>${money(e.f * m.size)}</td><td>${money(e.f * m.oracle)}</td><td>${money(marginOf(m.model, m.calls))}</td></tr>`).join("") +
     `</tbody><tfoot><tr><td class="l">Période</td><td>${sim.model.length}</td><td>${nf(e.f * t.calls)}</td><td>${nf(e.f * t.churners)}</td>
      <td>${money(e.f * t.capturedV)}</td><td>${money(e.f * s.capturedV)}</td><td>${money(e.f * o.capturedV)}</td><td>${money(marginOf(t.capturedV, t.calls))}</td></tr></tfoot>`;
 }
@@ -262,28 +401,35 @@ function niceStep(max) {
 }
 
 function renderChart(months, f) {
-  const W = Math.max($("chart").clientWidth, 320), H = 240, L = 56, B = 22, T = 8;
+  if (!$("chart").clientWidth) return; // hidden tab: drawn when it is shown
+  const W = Math.max($("chart").clientWidth - 36, 300), H = 280, L = 56, B = 26, T = 22;
   const max = Math.max(1, ...months.flatMap((m) => [m.model, m.size, m.oracle])) * f;
   const step = niceStep(max), top = Math.ceil(max / step) * step;
   const y = (v) => T + (H - T - B) * (1 - v / top);
+  const band = (W - L) / months.length, bw = Math.max(5, Math.min(24, (band - 14) / 3));
   let svg = `<svg width="${W}" height="${H}" role="img" aria-label="CA des partants capté par mois">`;
   for (let v = 0; v <= top + step / 2; v += step)
-    svg += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(${v ? "--grid" : "--axis"})"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${money(v)}</text>`;
-  const band = (W - L) / months.length, bw = Math.min(24, (band - 16) / 3);
+    svg += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(${v ? "--grid" : "--axis"})"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${money(v)}</text>`;
+  months.forEach((m, i) => { // hover bands first, so that the bars stay on top of the highlight
+    svg += `<rect class="hit" data-i="${i}" x="${L + band * i + 2}" y="${T - 14}" width="${band - 4}" height="${H - T - B + 14}" rx="8" fill="transparent"/>`;
+  });
   months.forEach((m, i) => {
     const x0 = L + band * i + (band - 3 * bw - 4) / 2;
     ["model", "size", "oracle"].forEach((p, j) => {
       const v = m[p] * f, x = x0 + j * (bw + 2), h = y(0) - y(v), r = Math.min(4, h, bw / 2);
-      svg += `<path d="M${x},${y(0)}v${-(h - r)}q0,${-r} ${r},${-r}h${bw - 2 * r}q${r},0 ${r},${r}v${h - r}z" fill="var(--s${j + 1})"/>`;
+      svg += `<path pointer-events="none" d="M${x},${y(0)}v${-(h - r)}q0,${-r} ${r},${-r}h${bw - 2 * r}q${r},0 ${r},${r}v${h - r}z" fill="var(--s${j + 1})"/>`;
     });
-    svg += `<text x="${L + band * (i + .5)}" y="${H - 6}" text-anchor="middle">${m.label}</text>`;
-    svg += `<rect data-i="${i}" x="${L + band * i}" y="${T}" width="${band}" height="${H - T - B}" fill="transparent"/>`;
+    if (band >= 66) // only the model is labelled; the table below has every value
+      svg += `<text class="val" pointer-events="none" x="${x0 + bw / 2}" y="${y(m.model * f) - 6}" text-anchor="middle">${nf(f * m.model / 1e6, 1)}</text>`;
+    svg += `<text x="${L + band * (i + .5)}" y="${H - 7}" text-anchor="middle">${m.label}</text>`;
   });
   $("chart").innerHTML = svg + "</svg>";
   $("chart").querySelectorAll("rect[data-i]").forEach((rect) => {
     rect.onmousemove = (ev) => {
       const m = months[+rect.dataset.i], tip = $("tip");
-      tip.innerHTML = `<b>${m.label}</b> (${m.lists} liste${m.lists > 1 ? "s" : ""})<br>Modèle : ${money(f * m.model)}<br>Plus gros clients : ${money(f * m.size)}<br>Oracle : ${money(f * m.oracle)}`;
+      tip.innerHTML = `<b>${m.label}</b> · ${m.lists} liste${m.lists > 1 ? "s" : ""}` +
+        [["model", "Modèle"], ["size", "Plus gros clients"], ["oracle", "Oracle"]]
+          .map(([p, name], j) => `<div><span><i class="key" style="background:var(--s${j + 1})"></i>${name}</span><strong>${money(f * m[p])}</strong></div>`).join("");
       tip.style.display = "block";
       tip.style.left = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
       tip.style.top = ev.clientY + 14 + "px";
@@ -294,56 +440,90 @@ function renderChart(months, f) {
 
 function renderLists() {
   let cum = 0;
+  const best = Math.max(1, ...sim.model.map((l) => l.newV));
   $("lists").innerHTML =
-    `<thead><tr><th class="l">Liste du</th><th>K</th><th>Clients</th><th>Déjà appelés avant</th><th>Partants dans la liste</th>
-     <th title="CA des partants de la liste / CA de tous les partants à cette date">Part captée à cette date</th>
-     <th>Nouveau CA capté</th><th title="Partants comptés une fois / tous les partants de la période">Cumul de la période</th></tr></thead><tbody>` +
+    `<thead><tr><th class="l">Liste du</th><th>K</th><th>Clients</th><th>Rappels</th><th>Partants</th>
+     <th title="CA des partants de la liste / CA de tous les partants à cette date">Part à cette date</th>
+     <th>Nouveau CA capté</th><th title="Partants comptés une fois / tous les partants de la période">Cumul période</th></tr></thead><tbody>` +
     sim.model.map((l, n) => {
       cum += l.newV;
-      return `<tr class="pick${n === selected ? " sel" : ""}" data-n="${n}"><td class="l">${frDate(l.date.date)}</td>
+      return `<tr class="pick${n === selected ? " sel" : ""}" data-n="${n}"><td class="l strong">${frDate(l.date.date)}</td>
         <td><input type="number" min="0" max="${kMax()}" step="10" value="${l.k}" data-k="${n}" aria-label="K de la liste du ${frDate(l.date.date)}"></td>
         <td>${nf(l.rows.length)}</td><td>${nf(l.calledBefore)}</td><td>${nf(l.churners)}</td>
-        <td>${pct(l.listV / l.date.churned_v)}</td><td>${money(l.newV)}</td><td>${pct(cum / data.total_loss)}</td></tr>`;
+        <td>${pct(l.listV / l.date.churned_v)}</td><td>${cellBar(l.newV / best, money(l.newV))}</td>
+        <td>${cellBar(cum / data.total_loss, pct(cum / data.total_loss))}</td></tr>`;
     }).join("") + "</tbody>";
 }
 
 const COLUMNS = [
-  ["rank", "Rang"], ["id", "Client"], ["seg", "Rythme"], ["rev180", "CA 180 j"], ["rev90", "CA 90 j"],
-  ["revprev", "CA 90 j d'avant"], ["trend", "Évolution"], ["v", "CA annualisé"], ["p", "Risque de départ"],
-  ["score", "Valeur à risque"], ["recency", "Dernier achat"],
+  ["rank", "Rang"], ["id", "Client", "l"], ["rev180", "CA 180 j"], ["rev90", "CA 90 j"], ["trend", "Évolution"],
+  ["p", "Risque"], ["score", "Valeur à risque"], ["recency", "Silence"],
 ];
+
+function trendPill(t) {
+  if (t === null) return "–";
+  return `<span class="pill ${t < 0 ? "down" : "up"}">${t < 0 ? "▼" : "▲"} ${t > 0 ? "+" : ""}${nf(100 * t)} %</span>`;
+}
+
+function detailRow(r, d, span) {
+  const why = d.r[r.i].filter(Boolean).map((c) => `<li>${data.reasons[c]}</li>`).join("");
+  const max = Math.max(1, r.rev90, r.revprev);
+  const line = (label, value, cls) => `<div>${label}</div><span><i class="${cls}" style="width:${100 * Math.max(0, value) / max}%"></i></span><div>${eur(value)}</div>`;
+  return `<tr class="detail"><td colspan="${span}"><div class="detail-grid">
+    <div><h4>Pourquoi ce client est à risque</h4><ol class="why">${why || "<li>Aucune raison disponible</li>"}</ol></div>
+    <div><h4>Chiffre d'affaires par période de 90 jours</h4>
+      <div class="compare">${line("90 j d'avant", r.revprev, "before")}${line("90 derniers j", r.rev90, "")}</div>
+      <p class="facts">${d.freq180[r.i]} jours d'achat sur 180, dont ${d.freq90[r.i]} sur les 90 derniers · écart habituel entre deux achats : ${nf(d.gap[r.i], 1)} j${r.before ? " · déjà présent dans une liste précédente" : ""}</p></div>
+  </div></td></tr>`;
+}
 
 function renderRanking() {
   const l = sim.model[selected], d = l.date, truth = $("truth").checked, query = $("search").value.trim();
-  $("rankTitle").textContent = `Classement des clients : liste du ${frDate(d.date)}`;
+  $("rankTitle").textContent = `Classement des clients · ${frDate(d.date)}`;
   let rows = l.rows.map((i, n) => ({
     i, rank: n + 1, id: d.id[i], seg: d.seg[i], rev180: d.rev180[i], rev90: d.rev90[i], revprev: d.revprev[i],
     trend: d.revprev[i] > 0 ? d.rev90[i] / d.revprev[i] - 1 : null, v: d.v[i], p: d.p[i],
     score: d[$("ranking").value][i], recency: d.recency[i], before: l.before[n],
   }));
+  const topScore = Math.max(1, ...rows.map((r) => r.score));
   if (query) rows = rows.filter((r) => String(r.id).includes(query));
   rows.sort((a, b) => sortDir * (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : a.rank - b.rank));
   const span = COLUMNS.length + (truth ? 1 : 0);
   $("ranktable").innerHTML =
-    "<thead><tr>" + COLUMNS.map(([k, name]) => `<th data-sort="${k}">${name}${k === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") +
-    (truth ? "<th>Réalité (180 j)</th>" : "") + "</tr></thead><tbody>" +
+    "<thead><tr>" + COLUMNS.map(([k, name, cls]) =>
+      `<th data-sort="${k}" class="${cls || ""}${k === sortKey ? " sorted" : ""}">${name}${k === sortKey ? (sortDir > 0 ? " ↑" : " ↓") : ""}</th>`).join("") +
+    (truth ? "<th>Réalité</th>" : "") + "</tr></thead><tbody>" +
     rows.map((r) => {
-      let html = `<tr class="pick" data-id="${r.id}"><td>${r.rank}</td><td>${r.id}${r.before ? " ↻" : ""}</td><td>${SEG[r.seg] || r.seg}</td>
-        <td>${eur(r.rev180)}</td><td>${eur(r.rev90)}</td><td>${eur(r.revprev)}</td>
-        <td>${r.trend === null ? "–" : (r.trend > 0 ? "+" : "") + nf(100 * r.trend) + " %"}</td>
-        <td>${eur(r.v)}</td><td>${pct(r.p, 0)}</td><td>${eur(r.score)}</td><td>il y a ${r.recency} j</td>
-        ${truth ? `<td>${d.gone[r.i] ? "● Parti" : "Resté"}</td>` : ""}</tr>`;
-      if (openRow === r.id) {
-        const why = d.r[r.i].filter(Boolean).map((c) => `<li>${data.reasons[c]}</li>`).join("");
-        html += `<tr class="detail"><td colspan="${span}"><b>Pourquoi ce client est à risque</b>
-          <ul>${why || "<li>Aucune raison disponible</li>"}</ul>
-          ${d.freq180[r.i]} jours d'achat sur 180 jours, dont ${d.freq90[r.i]} sur les 90 derniers · écart habituel entre deux achats : ${nf(d.gap[r.i], 1)} j
-          ${r.before ? " · ↻ déjà présent dans une liste précédente" : ""}</td></tr>`;
-      }
-      return html;
+      const open = openRow === r.id;
+      const html = `<tr class="pick${open ? " open" : ""}" data-id="${r.id}">
+        <td><span class="rank${r.rank <= 10 ? " top" : ""}">${r.rank}</span></td>
+        <td class="l"><span class="strong">${r.id}</span><span class="sub">${SEG[r.seg] || r.seg}${r.before ? " · ↻ rappel" : ""}</span></td>
+        <td><span class="strong">${eur(r.rev180)}</span><span class="sub">annualisé ${eur(r.v)}</span></td>
+        <td>${eur(r.rev90)}<span class="sub">avant ${eur(r.revprev)}</span></td>
+        <td>${trendPill(r.trend)}</td>
+        <td>${cellBar(r.p, pct(r.p, 0))}</td>
+        <td>${cellBar(r.score / topScore, `<b>${eur(r.score)}</b>`)}</td>
+        <td>${r.recency} j</td>
+        ${truth ? `<td>${d.gone[r.i] ? '<span class="pill gone">✕ Parti</span>' : '<span class="pill stay">✓ Resté</span>'}</td>` : ""}</tr>`;
+      return open ? html + detailRow(r, d, span) : html;
     }).join("") + (rows.length ? "" : `<tr><td class="l" colspan="${span}">Aucun client</td></tr>`) + "</tbody>";
 }
 
+function showTab(name) {
+  tab = name;
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== "tab-" + name));
+  if (name === "overview") renderChart(byMonth(), euroParams().f);
+}
+
+document.querySelector("nav").onclick = (ev) => ev.target.dataset.tab && showTab(ev.target.dataset.tab);
+document.querySelectorAll(".seg").forEach((seg) => (seg.onclick = (ev) => {
+  const value = ev.target.dataset.v, input = $(seg.dataset.for);
+  if (value === undefined || value === input.value) return;
+  input.value = value;
+  syncSegments();
+  input.dispatchEvent(new Event("change"));
+}));
 $("cadence").onchange = () => { selected = 0; resetK(data.defaults.k_per_week * +$("cadence").value); };
 $("kRange").oninput = () => ($("kNum").value = $("kRange").value);
 $("kRange").onchange = () => resetK(+$("kRange").value);
@@ -366,12 +546,12 @@ $("lists").addEventListener("click", (ev) => {
   if (!tr || ev.target.tagName === "INPUT") return;
   selected = +tr.dataset.n; openRow = null; $("pick").value = selected;
   renderLists(); renderRanking();
-  $("rankTitle").scrollIntoView({ behavior: "smooth" });
+  showTab("clients");
 });
 $("ranktable").addEventListener("click", (ev) => {
   const th = ev.target.closest("th[data-sort]"), tr = ev.target.closest("tr[data-id]");
   if (th) {
-    sortDir = th.dataset.sort === sortKey ? -sortDir : ["rank", "id", "seg", "recency"].includes(th.dataset.sort) ? 1 : -1;
+    sortDir = th.dataset.sort === sortKey ? -sortDir : ["rank", "id", "recency"].includes(th.dataset.sort) ? 1 : -1;
     sortKey = th.dataset.sort;
   } else if (tr) openRow = openRow === +tr.dataset.id ? null : +tr.dataset.id;
   else return;
