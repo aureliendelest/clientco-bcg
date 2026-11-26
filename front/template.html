@@ -200,10 +200,6 @@ svg .hit:hover { fill: var(--wash); }
       <label class="field">Marge brute (%)<input id="margin" type="number" min="0" max="100" step="0.05"></label>
       <label class="field">Coût/appel (€)<input id="cost" type="number" min="0" step="5" value="0"></label>
     </div>
-    <div class="field">
-      <label class="check"><input id="scaleOn" type="checkbox"> Extrapoler à l'entreprise</label>
-      <div class="kbig"><span>×</span><input id="scale" type="number" min="1" step="0.1" value="3.3" aria-label="Facteur d'extrapolation" style="font-size:14px;font-weight:400;width:80px"><small>non validé</small></div>
-    </div>
     <button id="reset" type="button" class="ghost">Réinitialiser les paramètres</button>
   </aside>
 
@@ -266,6 +262,7 @@ svg .hit:hover { fill: var(--wash); }
           <li>Ce cumul sur toute la période ne se compare pas au CA capté ni à la marge d'une seule liste de 700 clients du backtest.</li>
           <li>Le rejeu suppose que les appels ne changent pas le comportement des clients, donc pas les listes suivantes.</li>
           <li>Le résultat réel n'est connu que 180 jours après la liste : en production, la liste du jour n'a pas de CA capté.</li>
+          <li>Tous les montants et les appels portent sur le périmètre du dataset (environ 30 % du CA de l'entreprise), sans extrapolation.</li>
           <li>Une seule période, avec les modèles mensuels du backtest. La date du test final n'est pas utilisée.</li>
         </ul>
       </section>
@@ -313,7 +310,7 @@ function reset() {
   $("cadence").value = "2"; $("rest").value = "90"; $("ranking").value = "ev";
   $("retention").value = Math.round(100 * data.defaults.retention[1]);
   $("margin").value = +(100 * data.defaults.gross_margin).toFixed(2);
-  $("cost").value = 0; $("scaleOn").checked = false; $("scale").value = 3.3;
+  $("cost").value = 0;
   resetK(data.defaults.k_per_week * 2);
 }
 
@@ -349,9 +346,9 @@ function recompute() {
 
 function euroParams() {
   const num = (id) => Math.max(0, +$(id).value || 0);
-  return { r: num("retention") / 100, m: num("margin") / 100, cost: num("cost"), f: $("scaleOn").checked ? num("scale") : 1 };
+  return { r: num("retention") / 100, m: num("margin") / 100, cost: num("cost") };
 }
-const marginOf = (capturedV, calls) => { const e = euroParams(); return e.f * (e.r * e.m * capturedV - e.cost * calls); };
+const marginOf = (capturedV, calls) => { const e = euroParams(); return e.r * e.m * capturedV - e.cost * calls; };
 
 function byMonth() {
   const months = new Map();
@@ -370,7 +367,6 @@ function renderEuros() {
   const first = sim.model[0].date.date, last = sim.model[sim.model.length - 1].date.date;
   const end = new Date(Date.parse(last + "T00:00:00Z") + (7 * +$("cadence").value - 1) * 86400000).toISOString().slice(0, 10);
   $("period").textContent = `${frDate(first)} → ${frDate(end)}`;
-  const scope = e.f === 1 ? "Dataset (≈ 30 % du CA)" : `Entreprise : extrapolation × ${nf(e.f, 1)} non validée`;
   const [sm, ss, so] = [t, s, o].map((x) => x.capturedV / data.total_loss);
   const tile = (name, value, note, extra = "", cls = "") =>
     `<div class="card tile ${cls}"><div class="name">${name}</div><div class="value">${value}</div>${extra}<div class="note">${note}</div></div>`;
@@ -379,20 +375,20 @@ function renderEuros() {
   $("tiles").innerHTML =
     tile(e.cost > 0 ? "Marge nette sauvée" : "Marge brute sauvée", money(marginOf(t.capturedV, t.calls)),
          `Rétention ${nf(100 * e.r)} % · marge ${nf(100 * e.m, 2)} % · ${e.cost > 0 ? "coût d'appel déduit" : "coût d'appel non déduit"}`, "", "hero") +
-    tile("CA annuel des partants capté", money(e.f * t.capturedV), scope) +
+    tile("CA annuel des partants capté", money(t.capturedV), "Périmètre du dataset") +
     tile("Part du CA des partants", pct(sm),
          `<span class="nowrap"><i class="key" style="background:var(--s2)"></i>plus gros ${pct(ss)}</span> &nbsp; <span class="nowrap"><i class="key" style="background:var(--s3)"></i>oracle ${pct(so)}</span>`, meter) +
-    tile("Appels", nf(e.f * t.calls), `${sim.model.length} listes · ${nf(e.f * t.distinct)} clients distincts · ${nf(e.f * t.churners)} partants captés`);
+    tile("Appels", nf(t.calls), `${sim.model.length} listes · ${nf(t.distinct)} clients distincts · ${nf(t.churners)} partants captés`);
 
   const months = byMonth();
-  renderChart(months, e.f);
+  renderChart(months);
   $("months").innerHTML =
     `<thead><tr><th class="l">Mois</th><th>Listes</th><th>Appels</th><th>Partants captés</th><th>CA capté, modèle</th>
      <th>Plus gros clients</th><th>Oracle</th><th>Marge sauvée</th></tr></thead><tbody>` +
-    months.map((m) => `<tr><td class="l strong">${m.label}</td><td>${m.lists}</td><td>${nf(e.f * m.calls)}</td><td>${nf(e.f * m.churners)}</td>
-      <td class="strong">${money(e.f * m.model)}</td><td>${money(e.f * m.size)}</td><td>${money(e.f * m.oracle)}</td><td>${money(marginOf(m.model, m.calls))}</td></tr>`).join("") +
-    `</tbody><tfoot><tr><td class="l">Période</td><td>${sim.model.length}</td><td>${nf(e.f * t.calls)}</td><td>${nf(e.f * t.churners)}</td>
-     <td>${money(e.f * t.capturedV)}</td><td>${money(e.f * s.capturedV)}</td><td>${money(e.f * o.capturedV)}</td><td>${money(marginOf(t.capturedV, t.calls))}</td></tr></tfoot>`;
+    months.map((m) => `<tr><td class="l strong">${m.label}</td><td>${m.lists}</td><td>${nf(m.calls)}</td><td>${nf(m.churners)}</td>
+      <td class="strong">${money(m.model)}</td><td>${money(m.size)}</td><td>${money(m.oracle)}</td><td>${money(marginOf(m.model, m.calls))}</td></tr>`).join("") +
+    `</tbody><tfoot><tr><td class="l">Période</td><td>${sim.model.length}</td><td>${nf(t.calls)}</td><td>${nf(t.churners)}</td>
+     <td>${money(t.capturedV)}</td><td>${money(s.capturedV)}</td><td>${money(o.capturedV)}</td><td>${money(marginOf(t.capturedV, t.calls))}</td></tr></tfoot>`;
 }
 
 function niceStep(max) {
@@ -400,10 +396,10 @@ function niceStep(max) {
   return [1, 2, 5, 10].map((k) => k * p).find((s) => s >= raw);
 }
 
-function renderChart(months, f) {
+function renderChart(months) {
   if (!$("chart").clientWidth) return; // hidden tab: drawn when it is shown
   const W = Math.max($("chart").clientWidth - 36, 300), H = 280, L = 56, B = 26, T = 22;
-  const max = Math.max(1, ...months.flatMap((m) => [m.model, m.size, m.oracle])) * f;
+  const max = Math.max(1, ...months.flatMap((m) => [m.model, m.size, m.oracle]));
   const step = niceStep(max), top = Math.ceil(max / step) * step;
   const y = (v) => T + (H - T - B) * (1 - v / top);
   const band = (W - L) / months.length, bw = Math.max(5, Math.min(24, (band - 14) / 3));
@@ -416,11 +412,11 @@ function renderChart(months, f) {
   months.forEach((m, i) => {
     const x0 = L + band * i + (band - 3 * bw - 4) / 2;
     ["model", "size", "oracle"].forEach((p, j) => {
-      const v = m[p] * f, x = x0 + j * (bw + 2), h = y(0) - y(v), r = Math.min(4, h, bw / 2);
+      const v = m[p], x = x0 + j * (bw + 2), h = y(0) - y(v), r = Math.min(4, h, bw / 2);
       svg += `<path pointer-events="none" d="M${x},${y(0)}v${-(h - r)}q0,${-r} ${r},${-r}h${bw - 2 * r}q${r},0 ${r},${r}v${h - r}z" fill="var(--s${j + 1})"/>`;
     });
     if (band >= 66) // only the model is labelled; the table below has every value
-      svg += `<text class="val" pointer-events="none" x="${x0 + bw / 2}" y="${y(m.model * f) - 6}" text-anchor="middle">${nf(f * m.model / 1e6, 1)}</text>`;
+      svg += `<text class="val" pointer-events="none" x="${x0 + bw / 2}" y="${y(m.model) - 6}" text-anchor="middle">${nf(m.model / 1e6, 1)}</text>`;
     svg += `<text x="${L + band * (i + .5)}" y="${H - 7}" text-anchor="middle">${m.label}</text>`;
   });
   $("chart").innerHTML = svg + "</svg>";
@@ -429,7 +425,7 @@ function renderChart(months, f) {
       const m = months[+rect.dataset.i], tip = $("tip");
       tip.innerHTML = `<b>${m.label}</b> · ${m.lists} liste${m.lists > 1 ? "s" : ""}` +
         [["model", "Modèle"], ["size", "Plus gros clients"], ["oracle", "Oracle"]]
-          .map(([p, name], j) => `<div><span><i class="key" style="background:var(--s${j + 1})"></i>${name}</span><strong>${money(f * m[p])}</strong></div>`).join("");
+          .map(([p, name], j) => `<div><span><i class="key" style="background:var(--s${j + 1})"></i>${name}</span><strong>${money(m[p])}</strong></div>`).join("");
       tip.style.display = "block";
       tip.style.left = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
       tip.style.top = ev.clientY + 14 + "px";
@@ -513,7 +509,7 @@ function showTab(name) {
   tab = name;
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== "tab-" + name));
-  if (name === "overview") renderChart(byMonth(), euroParams().f);
+  if (name === "overview") renderChart(byMonth());
 }
 
 document.querySelector("nav").onclick = (ev) => ev.target.dataset.tab && showTab(ev.target.dataset.tab);
@@ -529,7 +525,7 @@ $("kRange").oninput = () => ($("kNum").value = $("kRange").value);
 $("kRange").onchange = () => resetK(+$("kRange").value);
 $("kNum").onchange = () => resetK(clampK($("kNum").value));
 $("rest").onchange = $("ranking").onchange = recompute;
-["retention", "margin", "cost", "scale", "scaleOn"].forEach((id) => ($(id).oninput = renderEuros));
+["retention", "margin", "cost"].forEach((id) => ($(id).oninput = renderEuros));
 $("reset").onclick = () => { selected = 0; reset(); };
 $("pick").onchange = () => { selected = +$("pick").value; openRow = null; renderLists(); renderRanking(); };
 $("search").oninput = $("truth").onchange = renderRanking;
