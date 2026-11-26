@@ -218,6 +218,13 @@ svg .hit:hover { fill: var(--wash); }
     <div class="panel" id="tab-overview">
       <section class="card">
         <div class="card-head">
+          <div><h2 id="finalTitle">Test final</h2><p id="finalSub"></p></div>
+          <span class="pill up">Indépendant des paramètres</span>
+        </div>
+        <div class="scroll"><table id="final"></table></div>
+      </section>
+      <section class="card">
+        <div class="card-head">
           <div><h2>CA des partants capté par mois</h2><p>Nouveaux partants captés par les listes du mois</p></div>
           <div class="legend">
             <span><i class="key" style="background:var(--s1)"></i>Modèle</span>
@@ -264,7 +271,8 @@ svg .hit:hover { fill: var(--wash); }
           <li>Le rejeu suppose que les appels ne changent pas le comportement des clients, donc pas les listes suivantes.</li>
           <li>Le résultat réel n'est connu que 180 jours après la liste : en production, la liste du jour n'a pas de CA capté.</li>
           <li>Tous les montants et les appels portent sur le périmètre du dataset (environ 30 % du CA de l'entreprise), sans extrapolation.</li>
-          <li>Une seule période, avec les modèles mensuels du backtest. La date du test final n'est pas utilisée.</li>
+          <li>Le rejeu porte sur une seule période, avec les modèles mensuels du backtest. Il s'arrête avant la date du test final.</li>
+          <li><b>Test final</b> : une seule liste, à une date exclue des dates de décision. La période n'est pas vierge : elle avait été regardée pendant l'exploration (choix du périmètre et du label). Ses pourcentages ne se comparent pas au cumul du rejeu. L'intervalle à 95 % est obtenu par rééchantillonnage (bootstrap).</li>
         </ul>
       </section>
     </div>
@@ -295,6 +303,7 @@ async function load() {
   data = JSON.parse(await new Response(stream).text());
   $("loading").hidden = true;
   $("app").hidden = false;
+  renderFinal();
   reset();
 }
 
@@ -390,6 +399,19 @@ function renderEuros() {
       <td class="strong">${money(m.model)}</td><td>${money(m.size)}</td><td>${money(m.oracle)}</td><td>${money(marginOf(m.model, m.calls))}</td></tr>`).join("") +
     `</tbody><tfoot><tr><td class="l">Période</td><td>${sim.model.length}</td><td>${nf(t.calls)}</td><td>${nf(t.churners)}</td>
      <td>${money(t.capturedV)}</td><td>${money(s.capturedV)}</td><td>${money(o.capturedV)}</td><td>${money(marginOf(t.capturedV, t.calls))}</td></tr></tfoot>`;
+}
+
+// Static: one list at the final test date, untouched by the settings.
+function renderFinal() {
+  const f = data.final;
+  $("finalTitle").textContent = `Test final · liste du ${frDate(f.date)}`;
+  $("finalSub").textContent = `Une seule liste de ${nf(f.k)} clients · part du CA annualisé des partants captée`;
+  const cell = (x) => `<td><span class="strong">${pct(x.value)}</span><span class="sub">IC 95 % : ${nf(100 * x.low, 1)} à ${pct(x.high)}</span></td>`;
+  $("final").innerHTML =
+    `<thead><tr><th class="l">Liste</th><th>Partants réguliers</th><th>Tous les partants</th></tr></thead><tbody>` +
+    [["model", "Modèle"], ["size", "Plus gros clients (sans modèle)"], ["oracle", "Oracle (plafond)"]]
+      .map(([p, name], j) => `<tr><td class="l${p === "model" ? " strong" : ""}"><i class="key" style="background:var(--s${j + 1})"></i>${name}</td>${cell(f.regular[p])}${cell(f.total[p])}</tr>`)
+      .join("") + "</tbody>";
 }
 
 function niceStep(max) {

@@ -5,9 +5,10 @@
 What it does: on a weekly grid, scores the regular clients with the saved monthly `final_backtest` models (the latest
 one dated on or before the snapshot; no retraining), keeps the clients any list could contain, adds the reasons, and
 embeds the result in `front/template.html` together with `front/engine.js` (which builds the lists in the browser).
+The "Test final" card shows the aggregate metrics of the final run, read from `results/metrics.parquet`.
 
 The output holds client-level data: it stays local (`data/` is not versioned) and must not be published or shared
-outside the team. The final test date is never read: the grid stops on 2026-03-02.
+outside the team. No snapshot of the final test date is built or scored here: the replay grid stops on 2026-03-02.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from churn import models
-from churn.config import RUNS_DIR, load_config, resolve
+from churn.config import RESULTS_DIR, RUNS_DIR, load_config, resolve
 from churn.data import build_client_day_table, connect
 from churn.scoring import _load_run, top_reasons
 from churn.snapshots import build_snapshot, in_perimeter
@@ -32,6 +33,12 @@ MODEL_DATES = pd.to_datetime(["2025-09-22", "2025-10-22", "2025-11-22", "2025-12
 # 24 weekly dates: cadences of 1, 2 or 4 weeks nest in it and cover the same 24 weeks, hence the same call budget.
 GRID = pd.date_range("2025-09-22", periods=24, freq="7D")
 FINAL_TEST = pd.Timestamp("2026-03-22")
+FINAL_K = 700
+# Payload key -> metric of the final run, for each of the two denominators.
+FINAL_METRICS = {
+    "regular": {"model": "capture_at_k", "size": "size_only_capture", "oracle": "oracle_capture"},
+    "total": {"model": "capture_total_at_k", "size": "size_only_total_capture", "oracle": "oracle_total_capture"},
+}
 # Clients embedded per date, from the top of each ranking (payload key -> depth). A list never goes below that depth: the
 # page warns when it runs out. The size ranking is stable from one date to the next, so the rest period digs deeper.
 DEPTH = {"ev": 5000, "evr": 5000, "v": 8000}
@@ -107,6 +114,21 @@ def encode_date(d: pd.Timestamp, df: pd.DataFrame, bundle: dict, model_date, los
     }
 
 
+def final_test() -> dict:
+    """Captured value of the single K = 700 list of the final run, with the 95 % bootstrap intervals."""
+    metrics = pd.read_parquet(RESULTS_DIR / "metrics.parquet")
+    rows = metrics.loc[metrics["run_id"].str.fullmatch(r"final-[0-9a-f]+")]
+    if rows["run_id"].nunique() != 1:
+        raise ValueError(f"Expected one final run in the results tables, found {rows['run_id'].nunique()}")
+    rows = rows.loc[(rows["split"] == "test") & (rows["segment"] == "all") & (rows["k"] == FINAL_K)].set_index("metric")
+
+    def values(name):
+        return {key: float(rows.at[name, col]) for key, col in (("value", "value"), ("low", "ci_low"), ("high", "ci_high"))}
+
+    out = {scope: {k: values(name) for k, name in names.items()} for scope, names in FINAL_METRICS.items()}
+    return {"date": f"{FINAL_TEST:%Y-%m-%d}", "k": FINAL_K, **out}
+
+
 def main() -> None:
     assert GRID.max() < FINAL_TEST, "the grid must stop before the final test date"
     frames, used = score_grid()
@@ -127,6 +149,7 @@ def main() -> None:
     cfg = load_config(resolve("configs/experiments/final.yaml"))
     payload = {
         "dates": dates,
+        "final": final_test(),
         "reasons": list(reasons),
         "depth": DEPTH,
         "total_loss": float(loss.sum()),
