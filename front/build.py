@@ -5,7 +5,8 @@
 What it does: on a weekly grid, scores the regular clients with the saved monthly `final_backtest` models (the latest
 one dated on or before the snapshot; no retraining), keeps the clients any list could contain, adds the reasons, and
 embeds the result in `front/template.html` together with `front/engine.js` (which builds the lists in the browser).
-The "Test final" card shows the aggregate metrics of the final run, read from `results/metrics.parquet`.
+The "Test final" card shows the aggregate metrics of the final run, read from `results/metrics.parquet`; the "Courbe
+test final" tab extends them to every list size from the saved predictions of that run (aggregates only).
 
 The output holds client-level data: it stays local (`data/` is not versioned) and must not be published or shared
 outside the team. No snapshot of the final test date is built or scored here: the replay grid stops on 2026-03-02.
@@ -34,6 +35,8 @@ MODEL_DATES = pd.to_datetime(["2025-09-22", "2025-10-22", "2025-11-22", "2025-12
 GRID = pd.date_range("2025-09-22", periods=24, freq="7D")
 FINAL_TEST = pd.Timestamp("2026-03-22")
 FINAL_K = 700
+# Final-test curve: list sizes from 0 to CURVE_K_MAX; the build checks it against the metrics at CHECK_K.
+CURVE_K_MAX, CURVE_STEP, CHECK_K = 4000, 10, (700, 2000, 4000)
 # Payload key -> metric of the final run, for each of the two denominators.
 FINAL_METRICS = {
     "regular": {"model": "capture_at_k", "size": "size_only_capture", "oracle": "oracle_capture"},
@@ -129,6 +132,34 @@ def final_test() -> dict:
     return {"date": f"{FINAL_TEST:%Y-%m-%d}", "k": FINAL_K, **out}
 
 
+def final_curve() -> dict:
+    """Share of the churners' V captured by the first K clients of the final run, for K = 0, CURVE_STEP, ...,
+    CURVE_K_MAX (model, biggest clients, oracle). Read from the saved predictions: nothing is scored again."""
+    found = sorted(p for p in RUNS_DIR.glob("final-*") if p.is_dir())
+    if len(found) != 1:
+        raise FileNotFoundError(f"Expected one final run in {RUNS_DIR}, found {len(found)}")
+    pred = pd.read_parquet(found[0] / "predictions.parquet")
+    if set(pred["snapshot_date"]) != {FINAL_TEST} or pred["gone"].isna().any():
+        raise ValueError(f"{found[0].name}: expected the predictions of {FINAL_TEST:%F} with a known truth")
+    lost = pred["V"] * pred["gone"]
+    sizes = np.arange(0, CURVE_K_MAX + 1, CURVE_STEP)
+
+    def shares(frame: pd.DataFrame, column: str) -> list[float]:
+        order = frame.sort_values([column, "client_id"], ascending=[False, True]).index
+        total = np.concatenate([[0.0], lost.loc[order].cumsum().to_numpy()])
+        return (total[np.minimum(sizes, len(order))] / lost.sum()).round(6).tolist()
+
+    curve = {"model": shares(pred, "ev"), "size": shares(pred, "V"), "oracle": shares(pred.loc[pred["gone"] == 1], "V")}
+    metrics = pd.read_parquet(RESULTS_DIR / "metrics.parquet")
+    rows = metrics.loc[(metrics["run_id"] == found[0].name) & (metrics["split"] == "test") & (metrics["segment"] == "all")]
+    for key, name in FINAL_METRICS["regular"].items():
+        for k in CHECK_K:
+            expected = rows.loc[(rows["metric"] == name) & (rows["k"] == k), "value"].item()
+            if abs(curve[key][k // CURVE_STEP] - expected) > 1e-5:
+                raise ValueError(f"{key} curve at K = {k} differs from the metric of the final run")
+    return {"date": f"{FINAL_TEST:%Y-%m-%d}", "k": FINAL_K, "step": CURVE_STEP, **curve}
+
+
 def main() -> None:
     assert GRID.max() < FINAL_TEST, "the grid must stop before the final test date"
     frames, used = score_grid()
@@ -150,6 +181,7 @@ def main() -> None:
     payload = {
         "dates": dates,
         "final": final_test(),
+        "curve": final_curve(),
         "reasons": list(reasons),
         "depth": DEPTH,
         "total_loss": float(loss.sum()),

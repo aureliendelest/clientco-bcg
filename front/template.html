@@ -88,7 +88,8 @@ nav button.on { color: var(--accent-ink); border-bottom-color: var(--accent); }
 .panel { display: flex; flex-direction: column; gap: 16px; }
 
 .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; }
-#chart { padding: 0 18px 12px; }
+#chart, #curve { padding: 0 18px 12px; }
+svg .scan { cursor: crosshair; }
 .scroll { overflow: auto; border-top: 1px solid var(--border); border-radius: 0 0 13px 13px; }
 .scroll.tall { max-height: 66vh; }
 table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -212,6 +213,7 @@ svg .hit:hover { fill: var(--wash); }
       <button type="button" data-tab="overview" class="on">Synthèse</button>
       <button type="button" data-tab="calls">Listes</button>
       <button type="button" data-tab="clients">Clients</button>
+      <button type="button" data-tab="curve">Courbe test final</button>
       <button type="button" data-tab="method">Méthode</button>
     </nav>
 
@@ -260,6 +262,20 @@ svg .hit:hover { fill: var(--wash); }
       </section>
     </div>
 
+    <div class="panel" id="tab-curve" hidden>
+      <section class="card">
+        <div class="card-head">
+          <div><h2>CA des partants capté selon la taille de la liste</h2><p id="curveSub"></p></div>
+          <div class="legend">
+            <span><i class="key" style="background:var(--s1)"></i>Modèle</span>
+            <span><i class="key" style="background:var(--s2)"></i>Plus gros clients (sans modèle)</span>
+            <span><i class="key" style="background:var(--s3)"></i>Oracle (plafond)</span>
+          </div>
+        </div>
+        <div id="curve"></div>
+      </section>
+    </div>
+
     <div class="panel" id="tab-method" hidden>
       <section class="card">
         <div class="card-head"><h2>Comment lire ces chiffres</h2></div>
@@ -273,6 +289,7 @@ svg .hit:hover { fill: var(--wash); }
           <li>Tous les montants et les appels portent sur le périmètre du dataset (environ 30 % du CA de l'entreprise), sans extrapolation.</li>
           <li>Le rejeu porte sur une seule période, avec les modèles mensuels du backtest. Il s'arrête avant la date du test final.</li>
           <li><b>Test final</b> : une seule liste, à une date exclue des dates de décision. La période n'est pas vierge : elle avait été regardée pendant l'exploration (choix du périmètre et du label). Ses pourcentages ne se comparent pas au cumul du rejeu. L'intervalle à 95 % est obtenu par rééchantillonnage (bootstrap).</li>
+          <li><b>Courbe test final</b> : la même date, pour d'autres tailles de liste. C'est une lecture descriptive, qui ne sert pas à choisir le nombre d'appels.</li>
         </ul>
       </section>
     </div>
@@ -414,6 +431,42 @@ function renderFinal() {
       .join("") + "</tbody>";
 }
 
+// Static: the final-test date at every list size, untouched by the settings.
+function renderCurve() {
+  if (!$("curve").clientWidth) return; // hidden tab: drawn when it is shown
+  const c = data.curve, kMax = (c.model.length - 1) * c.step;
+  const lists = [["model", "Modèle"], ["size", "Plus gros clients"], ["oracle", "Oracle"]];
+  $("curveSub").textContent = `Test final du ${frDate(c.date)} · clients réguliers · indépendant des paramètres · la ligne verticale marque ${nf(c.k)} appels`;
+  const W = Math.max($("curve").clientWidth - 36, 300), H = 320, L = 48, R = 12, B = 40, T = 14;
+  const x = (n) => L + (W - L - R) * (n / kMax), y = (v) => T + (H - T - B) * (1 - v);
+  let svg = `<svg width="${W}" height="${H}" role="img" aria-label="Part du CA des partants captée selon le nombre d'appels">`;
+  for (let v = 0; v <= 100; v += 25)
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y(v / 100)}" y2="${y(v / 100)}" stroke="var(${v ? "--grid" : "--axis"})"/><text x="${L - 8}" y="${y(v / 100) + 4}" text-anchor="end">${v} %</text>`;
+  for (let n = 0; n <= kMax; n += 1000)
+    svg += `<text x="${x(n)}" y="${H - 22}" text-anchor="${n === kMax ? "end" : "middle"}">${nf(n)}</text>`;
+  svg += `<text x="${L + (W - L - R) / 2}" y="${H - 5}" text-anchor="middle">Nombre d'appels</text>`;
+  svg += `<line x1="${x(c.k)}" x2="${x(c.k)}" y1="${T}" y2="${y(0)}" stroke="var(--ink-2)" stroke-dasharray="4 4"/>`;
+  lists.forEach(([p], j) => {
+    svg += `<polyline fill="none" stroke="var(--s${j + 1})" stroke-width="2" points="${c[p].map((v, i) => `${x(i * c.step)},${y(v)}`).join(" ")}"/>`;
+    const v = c[p][c.k / c.step];
+    svg += `<circle cx="${x(c.k)}" cy="${y(v)}" r="4" fill="var(--s${j + 1})" stroke="var(--surface)" stroke-width="2"/>`;
+    svg += `<text class="val" text-anchor="end" x="${x(c.k) - 8}" y="${y(v) - 7}">${pct(v)}</text>`;
+  });
+  svg += `<rect class="scan" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/>`;
+  $("curve").innerHTML = svg + "</svg>";
+  const scan = $("curve").querySelector("rect.scan");
+  scan.onmousemove = (ev) => {
+    const box = scan.getBoundingClientRect(), tip = $("tip");
+    const i = Math.min(c.model.length - 1, Math.max(0, Math.round(((ev.clientX - box.left) / box.width) * (c.model.length - 1))));
+    tip.innerHTML = `<b>${nf(i * c.step)} appels</b>` + lists.map(([p, name], j) =>
+      `<div><span><i class="key" style="background:var(--s${j + 1})"></i>${name}</span><strong>${pct(c[p][i])}</strong></div>`).join("");
+    tip.style.display = "block";
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = ev.clientY + 14 + "px";
+  };
+  scan.onmouseleave = () => ($("tip").style.display = "none");
+}
+
 function niceStep(max) {
   const raw = max / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
   return [1, 2, 5, 10].map((k) => k * p).find((s) => s >= raw);
@@ -533,6 +586,7 @@ function showTab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== "tab-" + name));
   if (name === "overview") renderChart(byMonth());
+  if (name === "curve") renderCurve();
 }
 
 document.querySelector("nav").onclick = (ev) => ev.target.dataset.tab && showTab(ev.target.dataset.tab);
@@ -578,7 +632,7 @@ $("ranktable").addEventListener("click", (ev) => {
   renderRanking();
   box.scrollTop = top;
 });
-addEventListener("resize", () => data && renderEuros());
+addEventListener("resize", () => data && (renderEuros(), renderCurve()));
 
 load().catch((err) => { $("loading").textContent = "Erreur de chargement : " + err.message; $("loading").hidden = false; });
 </script>
